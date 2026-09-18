@@ -1,0 +1,100 @@
+{
+  "baseUrl": "http://127.0.0.1:15501",
+  "startedAt": "2026-09-17T04:01:19.257Z",
+  "tests": [
+    {
+      "name": "Page loads with Alt+4 routing tab",
+      "ok": true,
+      "heading": "HRP Context Panel(mock UI)"
+    },
+    {
+      "name": "Preview 10 customers (batch) shows 10/10 + batch algorithm label",
+      "ok": true,
+      "hasModeText": true,
+      "hasAssigned": true,
+      "sample": "Pool cấu hìnhWeighted Distribution 3:2:1:4 (WEIGHTED_DISTRIBUTION v1)Tỷ trọng hiện tại:staff-sale-A: 3staff-sale-B: 2staff-sale-C: 1staff-sale-D: 4Tổng: 10 · Tỷ lệ (3:2:1:4)Số khách10 khách100 kháchCh"
+    },
+    {
+      "name": "Preview 100 customers (realtime) shows 100/100 + smooth WRR label",
+      "ok": true,
+      "hasRealtime": true,
+      "hasFullAssign": true
+    },
+    {
+      "name": "Manager edit increments version",
+      "ok": true,
+      "status": 200,
+      "initialVersion": 1,
+      "newVersion": 2
+    },
+    {
+      "name": "Sale edit blocked at server boundary (403 MANAGER_REQUIRED)",
+      "ok": true,
+      "status": 403,
+      "error": "MANAGER_REQUIRED"
+    },
+    {
+      "name": "Sale edit did NOT mutate description",
+      "ok": true,
+      "afterDesc": "Browser manager edit"
+    },
+    {
+      "name": "Stale revision returns VERSION_CONFLICT 409",
+      "ok": true,
+      "status": 409,
+      "error": "VERSION_CONFLICT"
+    },
+    {
+      "name": "Sale sees \"no permission\" hint in Routing tab",
+      "ok": true,
+      "hintVisible": true
+    },
+    {
+      "name": "Manager does NOT see \"no permission\" hint",
+      "ok": true,
+      "hintVisible": false
+    },
+    {
+      "name": "Narrow panel (<480px) hides per-staff distribution",
+      "ok": true,
+      "distributionVisible": false
+    },
+    {
+      "name": "Wide panel (>=480px) shows per-staff distribution",
+      "ok": true,
+      "distributionVisible": true
+    },
+    {
+      "name": "API simulation returns expected schema fields",
+      "ok": true,
+      "status": 200,
+      "mode": "batch",
+      "assignments": 10
+    },
+    {
+      "name": "Alt+1/2/3/4 cycles through all 4 tabs (keyboard nav)",
+      "ok": true,
+      "buttons": [
+        {
+          "tab": "Talent",
+          "ariaPressed": "true"
+        },
+        {
+          "tab": "Client",
+          "ariaPressed": "true"
+        },
+        {
+          "tab": "Intake Review",
+          "ariaPressed": "true"
+        },
+        {
+          "tab": "Routing",
+          "ariaPressed": "true"
+        }
+      ]
+    }
+  ],
+  "endedAt": "2026-09-17T04:01:36.846Z",
+  "pass": 13,
+  "fail": 0
+}

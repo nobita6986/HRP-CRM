@@ -1,0 +1,27 @@
+# CORE/1.10 — Handoff Manifest
+# Date: 2026-09-17T02:03:16.887Z
+# Generator: scripts/generate-manifest.mjs (SHA-256)
+# Total files: 15
+#
+# Format: FILE|<repo-relative-path>|<sha256-hex>
+#
+
+FILE|apps/core-1.10-media/src/evidence-store.ts|2d2b1f540d7003dc1b5640d97c416b0c20cc8eabecf845b22029ed45dd2cddeb
+FILE|apps/core-1.10-media/src/secret-provider.ts|b34bc306ad1c6a755c4a7d648763d49d7240e635d56e0f1ac73e46ab85e5eb66
+FILE|apps/core-1.10-media/src/url-policy.ts|4647e0e81946acaf75a18435f07b27ebc2c26bffa39d87c7be93bf10e2b78f62
+FILE|apps/core-1.10-media/src/policy-harness.ts|70c47f461df577e6e0f671ff765e4cd7e83357cb884ae99114d1e6ff73afdcfc
+FILE|apps/core-1.10-media/src/index.ts|1212dae9b7618ae6ccbcbe3f7889c6cabde3f69b39496ee585560d43adaa50ed
+FILE|apps/core-1.10-media/package.json|1a887053ae5301823aae8905957b9ee90cc3eb9fcb39483ec33f28f6d7e08542
+FILE|apps/core-1.10-media/tsconfig.json|f558f7d196439e1b2ee2714b09d2c0b568d4917c8a40678e39b239a24724743a
+FILE|apps/core-1.10-media/scripts/generate-manifest.mjs|ebdfc965500d31e88adb6b317ad3c6ee5c48819b9796ae6bdcadcf711fc9bad8
+FILE|apps/core-1.10-media/tests/evidence-store.test.mjs|4bd0dd9e37499bc4a2dac23b8a707dfe7c9b9412f10a92c55c6cf9349acdee63
+FILE|apps/core-1.10-media/tests/secret-provider.test.mjs|74208dc69852160550be3bd1f832464a80879848fa4311a61ea527f738ecd295
+FILE|apps/core-1.10-media/tests/url-policy.test.mjs|4c2878b854363d9d2f9b42f402e69e3d33ea704808176cb069d46a782d22a339
+FILE|apps/core-1.10-media/tests/policy-harness.test.mjs|76b4d1d4549075ce0042616a81e3bcf462a3f1c4e404a5a860b4c84bb18686fd
+FILE|apps/core-1.10-media/README.md|883b5dce9a34163e1a3714b1660ad98b685cc228dcf53bd9526b79dcb3788dff
+FILE|docs/contracts/adr-media-01-vn.md|cf8e9851d7297703b7dc04b89b8c94ef2ac159f20bacddfcda9ca5c8879c57ff
+FILE|docs/contracts/handoff-core-1.10.md|43b98689b9e8090972cd5e2cba398f685f3e1d72db974ea21c3a4afe695ea3e9
+
+# Verification (READ-ONLY):
+#   node scripts/generate-manifest.mjs --verify
+#   node scripts/generate-manifest.mjs --check

@@ -1,0 +1,39 @@
+# CORE/1.7 manifest — Review Service HTTP Boundary (Auditor F1+F2 delta)
+# SHA-256 hashes for all files in CORE/1.7 review service implementation + F1 fix.
+#
+# Delta history:
+#  - Initial: CORE/1.7 HTTP boundary hardening (async error handling fix)
+#  - Audit fix: DRY refactor, pageSize clamp, deterministic IDs
+#  - F1: Mock boundary guard (server-level block /mock/review/* when mockMode=off)
+#  - F2: Manifest update — 6 file bổ sung (permissions, types, index, review-http,
+#        review-service tests, handoff markdown).
+
+# ── Implementation ────────────────────────────────────────────────────────────
+
+4B9F167B8F76AE77F9FB335A28A119703585F3E58092F4F2B493AF203FAA384E  apps/integration-api/src/server.ts
+BE01E907CCC2549DF094CCB8FB633B19765FD647C826E271171F564E2F24A88A  apps/integration-api/src/review/http-handler.ts
+DC896BA9ABF9A420F7699AC457996140D1E009A1724C7134CA0EA4B88C586444  apps/integration-api/src/review/review-service.ts
+7EC0CEE3AA4674CF22607DB34741E72EAD9B54839CB219657ACEF6A87364E003  apps/integration-api/src/review/review-store.ts
+36675674241D5F1DD841A43BCC8BF67851BED5B06BBBA8B214215534871F0013  apps/integration-api/src/review/permissions.ts
+9A8F57BA9F114CCE9C13B0BAC9EB692DA9D127313DA18147A91AA125C580EBB4  apps/integration-api/src/review/types.ts
+24CE30BB50B84D0B4B6CEE082DF2DCAE5A29B078809E221BBA0EA8241F4D50C0  apps/integration-api/src/review/index.ts
+
+# ── Test coverage ─────────────────────────────────────────────────────────────
+
+6D6E7132938CB9C1485A2F310B31BE3CF00B5E6E4CCC48785021F10D02DE4A72  apps/integration-api/tests/review-http.test.mjs
+B13960F0BE86C7D32733B8E5C8A02642FCDAB75E6BFCDE100DD34045753D65E1  apps/integration-api/tests/review-service.test.mjs
+1DC91D5E01A1B3B69161D5721F87A2219AFBBE5229C3B1316FAFAB40DE058F3D  apps/integration-api/tests/f1-mock-guard.test.mjs
+39724AC78D3D5D1C5174FCB37A34BFC45CCFD52B5B586F8A084708A0AE0A5CA0  apps/integration-api/tests/http-boundary.test.mjs
+7049E54C8C05E9FE1BABA47C6EA1118B31180DC9C858C47398ABAEDC316853D7  apps/integration-api/tests/ac-coverage.test.mjs
+
+# ── Handoff ───────────────────────────────────────────────────────────────────
+567B7304892091A2F93907F3E202BA81C61C8C2FD947F0231D2F562C54663A6E  docs/contracts/handoff-core-1.7-boundary.md
+
+# ── Test totals ───────────────────────────────────────────────────────────────
+# f1-mock-guard.test.mjs  : 23 tests (T1.1-6, T2.1-3, T3.1-3, T4.1-7, T5.1-4)
+# http-boundary.test.mjs  : 15 tests (B1.1-3, B2.1-3, B3.1-3, B4.1-4, B5.1-2)
+# ac-coverage.test.mjs    : 18 tests (AC1.1-5, AC2.1-3, AC3.1-4, AC4.1-6)
+# review-http.test.mjs    : 13 tests
+# review-service.test.mjs : 29 tests
+# Total review coverage    : 98 tests
+# Full integration-api    : 248 tests

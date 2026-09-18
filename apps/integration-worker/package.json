@@ -1,0 +1,32 @@
+{
+  "name": "@hrp-engagement/integration-worker",
+  "version": "1.2.0-core1.6",
+  "private": true,
+  "description": "CORE/1.4 — Durable worker with queue leasing. Pin contracts 0.0.8-g0.8-fixes.",
+  "type": "module",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.test.mjs",
+    "start": "node dist/server.js",
+    "dev": "NODE_ENV=development HRP_MOCK_MODE=deterministic node --import tsx/esm src/server.ts"
+  },
+  "dependencies": {
+    "@hrp-engagement/config": "file:../../packages/config",
+    "@hrp-engagement/contracts": "file:../../packages/contracts",
+    "@hrp-engagement/integration-store": "file:../../packages/integration-store",
+    "@prisma/client": "^5.22.0",
+    "zod": "3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.2",
+    "embedded-postgres": "^18.4.0-beta.17",
+    "pg": "^8.23.0",
+    "tsx": "4.19.2",
+    "typescript": "5.7.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

@@ -1,0 +1,37 @@
+# CORE/1.11 — Handoff Manifest
+# Date: 2026-09-18T07:03:01.515Z
+# Generator: scripts/generate-manifest-1.11.mjs (SHA-256)
+# Total files: 15
+#
+# CORE/1.11 delta from CORE/1.9 baseline:
+#  - NEW: 9 files (4 routing src + 1 UI + 4 tests/bootstrap)
+#  - SHARED: 2 files (server.ts, app.tsx) — modified by adding routing routes/tab
+#  - DOCS: 1 file (handoff-core-1.11.md)
+#
+# SHARED files: their hashes reflect CURRENT (post-delta) state, NOT
+# the CORE/1.9 audit-PASS hash. To compare against CORE/1.9 baseline,
+# see docs/contracts/handoff-core-1.9.manifest.txt — the SHARED files
+# are listed in BOTH manifests with potentially different hashes.
+#
+# Format: FILE|<repo-relative-path>|<sha256-hex>
+#
+
+FILE|apps/context-panel/src/routing/types.ts|734c60a1ed384cd62426bc65e78f09844a1a1a1665743c34ab466974d8330ecb
+FILE|apps/context-panel/src/routing/simulator.ts|56803f3447e322e308a3f646addc8a29f731f004bcadfdf24cd930730918eb3c
+FILE|apps/context-panel/src/routing/config-store.ts|0abd5feb27a8b1fd76bb66f68b5c106d6386b6f3dbb9eeeddbdecc8e0349e1d2
+FILE|apps/context-panel/src/routing/service.ts|7d1670eaecf10df6670a19316198a2d67a95d377f7cfd693028b9b521e95f708
+FILE|apps/context-panel/src/ui/components/routing-panel.tsx|520436bb5ac72d77d336f5cf8201c60ea2870fb14d03e325eb939c624a6825ef
+FILE|apps/context-panel/tests/routing-simulator.test.mjs|1f5338d77f859a921909ad1421594c7b14a348a85b62e6ffc05e94c06a5b676b
+FILE|apps/context-panel/tests/routing-api.test.mjs|e22dda71a35802b1edce88ed8c8191b3d85483fb3bf319e8ca748c34a04a4683
+FILE|apps/context-panel/tests/routing-browser-evidence.mjs|56b2b4e93b8c4bc71784235bf946b141194d3dd59196a68bf0be60013abc0ea3
+FILE|apps/context-panel/tests/routing-server-bootstrap.mjs|d9c2b63423e8cdbe8ba370839d62651531786f5e8248fafc67fa651f11c0edee
+FILE|apps/context-panel/tests/manifest-readonly-1.11.test.mjs|59d5e18b98a978b971d0d48ab952ceadfe22d5664164de3c3088f374249ca210
+FILE|apps/context-panel/scripts/generate-manifest-1.11.mjs|b1c4dc2e85ff129a80731968cbb5d2140a2672f906b163bd045a0083a79ce271
+FILE|apps/context-panel/src/server.ts|ca2341245c2ad68e551ad82b16853f9bc664309aba4067baed064bff99e02780
+FILE|apps/context-panel/src/ui/app.tsx|a6db23243471831bccac6112be99938ae8272ae6a09f1d9feb0574a393aebc8a
+FILE|docs/contracts/handoff-core-1.11.md|063edae8e5be98f65eed5766cc1ecd7af14636f981d4e17648eda0a0f5e4557a
+FILE|docs/contracts/handoff-core-1.11.status.md|5d5aefcc06ec6c7c56648aee47218c7e7218cf6fbd4c883232b7e9d19b425158
+
+# Verification (READ-ONLY):
+#   node scripts/generate-manifest-1.11.mjs --verify
+#   node scripts/generate-manifest-1.11.mjs --check

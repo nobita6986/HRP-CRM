@@ -1,0 +1,72 @@
+{
+  "baseUrl": "http://127.0.0.1:15507",
+  "startedAt": "2026-09-17T07:28:42.166Z",
+  "tests": [
+    {
+      "name": "Alt+6 keyboard nav reaches Assistant tab",
+      "ok": true,
+      "note": "panel rendered"
+    },
+    {
+      "name": "Today view renders deterministic items",
+      "ok": true,
+      "note": "3 items"
+    },
+    {
+      "name": "Week view renders plan items",
+      "ok": true,
+      "note": "10 items"
+    },
+    {
+      "name": "Autofill shows clear/conflict/stale proposals",
+      "ok": true,
+      "note": "3 proposals"
+    },
+    {
+      "name": "Manager can accept autofill (mutation allowed)",
+      "ok": true,
+      "note": "prop-profile-demo-001-clear-001 · trạng thái: ACCEPTED · con"
+    },
+    {
+      "name": "Planning tab commit shows batch result",
+      "ok": true,
+      "note": "batch result visible"
+    },
+    {
+      "name": "Reschedule stale version surfaces VERSION_CONFLICT",
+      "ok": true,
+      "note": "{\n  \"success\": false,\n  \"error\": \"VERSION_CONFLICT\",\n  \"mess"
+    },
+    {
+      "name": "Provider tab renders ≥2 configs without raw API key",
+      "ok": true,
+      "note": "2 providers"
+    },
+    {
+      "name": "Reminder tab runs simulator with deterministic counts",
+      "ok": true,
+      "note": "simulator ran"
+    },
+    {
+      "name": "Narrow panel (<480px) keeps Assistant usable",
+      "ok": true,
+      "note": "narrow OK"
+    },
+    {
+      "name": "Sale sees \"no permission\" hint on Autofill",
+      "ok": true,
+      "note": "sale hint shown"
+    },
+    {
+      "name": "Sale sees \"no permission\" hint on Provider",
+      "ok": true,
+      "note": "sale provider hint"
+    }
+  ],
+  "endedAt": "2026-09-17T07:28:53.772Z",
+  "summary": {
+    "passed": 12,
+    "failed": 0,
+    "total": 12
+  }
+}

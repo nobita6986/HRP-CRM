@@ -1,0 +1,59 @@
+{
+  "baseUrl": "http://127.0.0.1:15501",
+  "startedAt": "2026-09-17T05:42:27.498Z",
+  "tests": [
+    {
+      "name": "Alt+5 keyboard nav reaches Dashboard tab",
+      "ok": true,
+      "note": "panel rendered"
+    },
+    {
+      "name": "Coverage header shows source/grain/as-of/credit policy labels",
+      "ok": true,
+      "note": "Source: CHATWOOT, ZALO_OA, CHAT_ONLY, INTERNAL_FORM, HRP_UI⚠️ CHAT_ONLY chỉ tách dòng, KHÔNG tính vào tổng công ty.\nGrai"
+    },
+    {
+      "name": "Chart view shows clickable stage cells (≥3)",
+      "ok": true,
+      "note": "10 cells"
+    },
+    {
+      "name": "Click chart cell opens drill-down with consistent sumCheck",
+      "ok": true,
+      "note": "cells=10"
+    },
+    {
+      "name": "KPI view shows assigned targets (≥4)",
+      "ok": true,
+      "note": "6 rows"
+    },
+    {
+      "name": "Table view shows data rows (≥4)",
+      "ok": true,
+      "note": "10 rows"
+    },
+    {
+      "name": "Period filter change updates chart (cell count changed)",
+      "ok": true,
+      "note": "before=10, after=61"
+    },
+    {
+      "name": "Narrow panel (<480px) keeps dashboard usable",
+      "ok": true,
+      "note": "narrow layout OK"
+    },
+    {
+      "name": "Sale sees \"no permission\" hint in KPI view",
+      "ok": true,
+      "note": "Phạm vi (grain)\nToàn công ty\nTheo team\nTheo cohort\nTheo nhân viên\nKỳ\nNgày\nTuần\nT"
+    },
+    {
+      "name": "Manager does NOT see \"no permission\" hint",
+      "ok": true,
+      "note": "manager view clean"
+    }
+  ],
+  "endedAt": "2026-09-17T05:42:37.872Z",
+  "passed": 10,
+  "total": 10
+}

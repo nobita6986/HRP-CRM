@@ -1,0 +1,47 @@
+# Manifest cho gói G0/0.5
+
+HEAD: 414c54bfa2e227ec1a25694310e48908e0d67abe
+Branch: main
+Date: 2026-09-13
+Package version: 0.0.6-g0.5
+
+Manifest chứa SHA-256 của source/tests/docs trong bundle này.
+Manifest tách khỏi file handoff để tránh tự tham chiếu hash (Owner chỉ thị).
+
+## Source mới (packages/contracts/src/commands/)
+
+```
+92D05D9106625326222BBC7CE9D2CC5C09375D8B642ADEA3FC74D24E38D8F326  packages/contracts/src/commands/routing.ts
+824A4E149C13968CF2E2F6CDE360DB32854333798205594A86B9D268B77F592F  packages/contracts/src/commands/analytics.ts
+3DA1B2D45320810B5F3B8EF91A5BDD3F77463C8D38E0BED843F2ED1D6F36E029  packages/contracts/src/commands/kpi.ts
+81545BAA52CFF7A5AF9C4E0CC2801FF9BBCABDFBB6EF9293AEFA32AB7BA47C3A  packages/contracts/src/commands/ai-proposals.ts
+7C9CBDE564A0A406AB4C6606A9B71188213F6BE46AE46A5CCEFD2B88B6922BAE  packages/contracts/src/commands/ai-provider-config.ts
+```
+
+## Source sửa (Q-32 contract bind OperationReference canonical)
+
+```
+6486D3A3D87703230510111E0CD7E8F1C2CA9C0E2CDD70B8C81A3407A5576914  packages/contracts/src/commands/scheduling.ts
+38B86B8602FF7AAC43A69B65F486576D97AA157C20C447E6E39165FE33DB0F2B  packages/contracts/src/index.ts
+```
+
+Breaking change: `PlanningBatchItemResultSchema.pendingId: z.string()` (opaque)
+đã được đổi thành `pendingReference: OperationReferenceSchema` (canonical
+`{ kind: 'COMMAND_OPERATION', operationId: CommandIdSchema }`). Consumers
+cũ cần cập nhật payload — xem handoff §Q-32.
+
+## Tests mới + sửa
+
+```
+2ECCF4260D69DDA0E71FA7C33BDF874CECB47C21C48297A1B8A83CAE60BAB2D3  packages/contracts/tests/routing-analytics-kpi-ai.test.mjs
+5876F0B8CAC80B6021800533ADD295AB50E0AB34AD1C40E80F860BC69ABF5EA4  packages/contracts/tests/scheduling.test.mjs
+```
+
+## Docs
+
+Hash các file docs được ghi trong handoff chính (xem `handoff-g0-0.5.md`).
+
+## Self-reference
+
+Hash file này sẽ được ghi ở dòng cuối handoff bundle; KHÔNG tự ghi
+trong manifest để tránh vòng lặp hash.

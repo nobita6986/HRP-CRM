@@ -1,0 +1,79 @@
+CORE/1.5 — Normalize, Mapping & Semantic Firewall
+======================================================
+Contracts pin: 0.0.8-g0.8-fixes
+Gate 0: FREEZE
+Status: IMPLEMENTATION COMPLETE — AUDITOR REQUEST CHANGES, DEFECTS FIXED + RE-RUN CLEAN 566/566
+Re-run date: 2026-09-14 21:43 (+07)
+
+# SHA-256 hashes (lowercase hex)
+# Computed 2026-09-14 21:43 (+07) — all post-audit-fix files
+
+# ── integration-worker source (Δ1–Δ3) ──────────────────────────────────
+
+6c1b78eceece0e26f065696ab3824778dfa0d3364c471a65d59d02643b4bb491  apps/integration-worker/src/pipeline-executor.ts
+f92d15700cde492febf25a87049d72d99b39df39898f91eb8eced479c335c5c1  apps/integration-worker/src/mapping.ts
+2107452610bf978e98b1350eaaea99584b1925b8478a3189159520a4c769f9ecc  apps/integration-worker/src/normalizer-shim/event-normalizer.ts
+a79ecfc090b6f5901b6ff119fe749a6c6f1de793f453171a4c9b8402d1635beb  apps/integration-worker/src/firewall.ts
+
+# durable-worker.ts — wired to pipeline-executor (unchanged)
+# server.ts — wired to pipeline-executor (Δ2)
+# gateway-client.ts — HTTP client
+# shared-types.ts — shared HTTP types
+# types-shim.ts — minimal worker types
+
+# ── integration-worker tests (Δ1–Δ3) ────────────────────────────────────
+
+cabc9099793d89975964f652173f61b219205b704229f1ecd4038ee1d91e8dd4  apps/integration-worker/tests/pg-worker-harness.mjs
+f85feb6efc454a57205755bca2272b79590caef48fd760257e3d0ade012728f0  apps/integration-worker/tests/pg-e2e.test.mjs                        # AUDIT FIX: 120_000ms suite timeout at line 87
+5580cb5081b4a98078cdb0f20184d6cc4c11f9ef8e7aa8ca99683e8c7efbbfd5  apps/integration-worker/tests/revision-track.test.mjs
+83add4ee5de71ce48c26863a54820153b761e7db018e6c708fd5482fc57c7e22  apps/integration-worker/tests/ac5-staff-assisted.test.mjs
+b69cbab56343446bd62597df83fe51cb172148368af304c0bb99cfd6d6f47d65  apps/integration-worker/tests/pipeline.test.mjs
+ea585b1439a1b09ff8d3b174886e521fd9382c957eae2edf20fbfbed992cd2bd  apps/integration-worker/tests/e2e-gateway.test.mjs
+c407d0a54a30b02ef312d6828bfeedbfc6ff70be46c749be244f566289daeb5d  apps/integration-worker/tests/call-log.test.mjs                       # AUDIT FIX: 5× eventId='!' → unique IDs at lines 74/192/210/247/266
+61d9dd4699b57a8ab0f879d813deec6e4356999b6718ff93aeb1f949b9482894  apps/integration-worker/tests/server.test.mjs
+
+# ── integration-api source ──────────────────────────────────────────────
+
+# src/normalizer/event-types.ts
+# src/normalizer/event-normalizer.ts
+# src/firewall/semantic-firewall.ts
+# src/mapping/mapping-service.ts
+# src/pipeline/event-pipeline.ts
+
+# ── handoff documents ──────────────────────────────────────────────────
+
+0493c149fafe31b2f34befcc5a559774a97167921706d2008d9bad26f81c14f4  docs/contracts/handoff-core-1.5.md   # pre-self-ref; final = 3eeade647711d605d10c36cc1eb303f14111c3520d671b7fd713200a0794b4ef
+ca7b857a3842c780049cfe47954b75d654ea75b00a7b9d43b635630ec839f7a3  docs/contracts/handoff-core-1.5.manifest.txt   # final (after evidence-section + self-ref-note fixes)
+# Note: manifest deliberately does NOT include a self-referential hash declaration — any such
+# declaration would change the file's hash the moment it is written, making the declared hash
+# stale. The line above was the canonical hash captured immediately before this note was added.
+
+# ── Evidence files (test run transcripts) ─────────────────────────────
+
+# apps/integration-worker/.pg-clean-recovery.txt   — pg-e2e.test.mjs re-run (6/6 PASS)
+# apps/integration-worker/.pg-full-recovery.txt    — full worker suite (56/56 PASS)
+# apps/integration-worker/.pg-recovery-evidence.txt — human summary of cleanup + re-run
+
+# ── Test counts (re-verified 2026-09-14 21:43 +07) ─────────────────────
+
+# Worker non-PG tests: 50/50 passing
+#   pipeline.test.mjs          (normalize + classify + mapping)
+#   e2e-gateway.test.mjs       (HTTP gateway E2E)
+#   call-log.test.mjs          (idempotency)
+#   revision-track.test.mjs    (4 Δ2 tests)
+#   ac5-staff-assisted.test.mjs(5 Δ3 tests)
+#   server.test.mjs            (worker server + health)
+
+# Worker PG-E2E tests: 6/6 passing (Δ1)
+#   pg-e2e.test.mjs
+#     - commitReceiptWithIntents → PENDING
+#     - upsertContactLink EXACT_MATCH
+#     - upsertConversationLink currentRevision
+#     - AUTHORITATIVE → SUCCESS
+#     - private note → SKIPPED
+#     - POSSIBLE_MATCH → REVIEW
+
+# API tests: 102/102 passing
+# Packages tests: 398/398 (contracts) + 10/10 (store) passing
+
+# GRAND TOTAL: 566/566 — all green

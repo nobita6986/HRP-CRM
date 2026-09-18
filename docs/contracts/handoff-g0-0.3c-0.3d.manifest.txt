@@ -1,0 +1,76 @@
+# SHA-256 hash manifest — G0/0.3c–0.3d bundle
+
+**Snapshot**: 2026-09-13 10:48 UTC+7 (sau đối chiếu AC + rev 2 deltas).
+**Workspace**: `D:\CodeApp\Hrp-Crm` (working tree, branch `main`, chưa commit).
+
+Manifest tách khỏi `handoff-g0-0.3c-0.3d.md` để tránh tự ghi hash của
+chính file chứa manifest (Owner chỉ thị rev 2). Mỗi rev/hash đo từ
+PowerShell `Get-FileHash -Algorithm SHA256` trên từng file path dưới
+đây.
+
+```
+.gitignore                                            1DDD9AC19D54ED8C1900C5740EE27D7A8807DABE6AF93763D52DACF8E950DCE0
+docs/Importal/Execution-Guide.HRP-Engagement.md       49B57A23CEACBD8897BBBEE400D3EB786C81083BD0151D3AB8685C408246A1AD
+docs/Importal/Master-Plan.V2.6.md                     B82EF7A5A36BF7AC9CF19F1E1F57BBB71CFA19F8C3CE81F69AA1F7A9754FC1CC
+docs/Importal/Implementation-Backlog.Gate0-V7.9a.md   0DFB02809F07F69A9DE897EB349983393E5E7A138DFB7A6BBAB902C94379C73E
+docs/Importal/Implementation-Backlog.HRP-Owned-V7.9b-f.md  BE7F9B3F789C62A69460D79D079F5353CFFCF42153706B809CCD41AE02C4A673
+docs/Importal/Implementation-Backlog.V7.10-AI-BoD.md 77E5A6FC33E90BD828BDE3D31C8927F88D22F2B486D6ECDDB73F693E4F4314DD
+docs/Importal/hrp-connector.md                        EFBAE0F5525F4A408B6D542B0B3B2C21C6A521734947D698D47DBA7AD9A2618B
+docs/contracts/checkpoint.g0-0.0-0.2.md               B2B61AE671BDA722973342DBCA638E3FB814DEB68EB953CE7EDECDB9023E6EC7
+docs/contracts/decision-register.md                   6766C2536523DF53C00EA62E2AFBFB0E41B7DF9A3598777661DC7864388E1053
+docs/contracts/g0-0.0-0.2-handoff.md                  823075ED8EA611634B3CD120B64031B6003F614133F6692310D16E185EF54658
+docs/contracts/handoff-g0-0.3a-0.3b.md                2557A5FFD22BA0AC41BAC910138703FAF2ECBEB31915D995C9B111576C12AF07
+docs/contracts/handoff-g0-0.3c-0.3d.md                6F6B62DC7718D2398C5209FAC95AF6667C40FE3350DE7EB23CE08124021BC912
+docs/contracts/inventory.md                           ED3B5B01CF52FAE3B4ECD2EF75D941E4DCC930CEE4E380F78EA6D001B1B49579
+docs/contracts/handoff-g0-0.3c-0.3d.manifest.txt       <hash sẽ cập nhật khi đóng G0/0.3e–0.3f>
+packages/contracts/package-lock.json                  31EBFAA71DD86030DE374B4DF62D852A30A32517D7D07A40C0F0629C12604FC0
+packages/contracts/package.json                       569E9705604989A16F560554FB34F9923A9B027959FE587CF4D6D431242E5D27
+packages/contracts/README.md                          097FF97E7FA7CE791EFCFA9495F73EE7DA897599C640C639CDC9BAF3784F8EC4
+packages/contracts/tsconfig.json                      5AC522BD9ED4375A22933BE65A9E3B00A4C546F34D7EE8A276CC40F8C00058D2
+packages/contracts/src/index.ts                       04D372558CBEEB7E10B6FB9AE6E428B54F85FDD1AFEFE57F69218E38574A9BC2
+packages/contracts/src/enums.ts                       FF6EE50AADA938843BFA4546EF0D268EF8EAC702BFA4690D18F396520F1D1581
+packages/contracts/src/primitives.ts                  359A37758E18069ED69E5E1015B8EA00ED18C6B2F598B6125AFCE01962EF56AC
+packages/contracts/src/errors.ts                      54DF177848033B509789607377DD92F7319A08988B29558E8100F6C5E7E867E0
+packages/contracts/src/envelopes.ts                   F68EA4866C4F33786B03298CA531B454FF97437200D31457D5AC89D1F32AF4D2
+packages/contracts/src/commands/evidence.ts           E9B123EC0E2F3D23B460407F9CA442B4B555AB22196B0C482CBD791D3BB62C54
+packages/contracts/src/commands/identity.ts           6304D2E16C2E2729AC93468294E2BBC2849710F8BF19A0AB556B9CC9A6FAF82A
+packages/contracts/src/commands/intake.ts             D95DFE2B0898CC3C1949C580F652F512D408C2274719267DDA5EAD6ED04DDC7B
+packages/contracts/src/commands/profile.ts            6E89063E9119F800DAF6F23B07FF14F6DDEEE0A02EE7F1E297C619BAC0C66D77
+packages/contracts/src/commands/placement-case.ts      50E0A73F4C5B03E1865B0C061E2ED51AB45B8285162E454F724131A7490D5E58
+packages/contracts/src/commands/interactions.ts       96C14311A1568D478237AFC2C2AB73E2EC0C85D1ED08BC63EA8DB7F29283EC30
+packages/contracts/tests/enums.test.mjs               24C6AC5BDCEE4529E36DE3A9A26A5BF00F6FE0485C8652888B091F2BE4755D91
+packages/contracts/tests/errors.test.mjs              D5F404E14A748559607557AC2566F7F0141130D0F5A8CE9F1D3C2348E3E5503F
+packages/contracts/tests/envelopes.test.mjs           3D406A11189C02C226CF6C8A6DD423C6622AF3F0C03B4FCC53007D8DE52E26A5
+packages/contracts/tests/identity.test.mjs            3C1D634CA911AAC5CB321C416FE980A5755066839D89F5B98AEA3DAB18BDA40B
+packages/contracts/tests/profile-intake.test.mjs      CC17D2702904ABFA6E6F9A3A487309B4269CD43A4BAD8A97CF225F0C866ECC70
+packages/contracts/tests/enums-extra.test.mjs         87332D3F6EE6F58904685A53CE8536B72F400D106D4AAF3715065445287AB765
+packages/contracts/tests/placement-case-interactions.test.mjs  34986CBC5A4071BB1BDE34A0F51502840D5E437E01933BD839482E4514360C4E
+packages/contracts/tests/contracts.synthetic.mjs      EDE9DFECCD3A9F148047D872C48D36F15E5B12E3E5609356F5660A3E70572F03
+packages/contracts/tests/_synthetic-pending.md        8B5E583F49FCAC24C3C119A81856AF4BB991AE18A443D33E45520406D18E06CD
+packages/contracts/tests/_synthetic-coverage.md       3BE68544A0942371A7753CDFA9A10F8168F04D261E939BE86D9F897FE7320E7B
+packages/contracts/tests/enums.legacy.mjs             254BF651A4962989FC08EBE3A057D7703CD8A17D2789BB9F9EB7CDAADD9DE87D
+packages/contracts/tests/envelopes.legacy.mjs         8E7424BA6E896168AEF1CDA33E719CE3D5EC384D943158FB4CFE31FECAA9E934
+packages/contracts/tests/errors.legacy.mjs            6E9C7CCB0F2DF6FD31E2DC05DBAE15D8A4F85CCD185AC4FC10A3E3AFC8CDEFF4
+```
+
+**Ghi chú**:
+- File này không liệt kê hash của chính nó trước khi cập nhật (tránh
+  tự tham chiếu). Sau khi tất cả task G0/0.3e–0.3f hoàn tất, hash của
+  file này sẽ được tính và ghi ở manifest của rev sau, cùng với tất cả
+  file mới (availability.ts, suppression.ts, next-action.ts,
+  scheduling.ts, test tương ứng, decision-register update, inventory
+  update, handoff rev 3).
+- Hash thay đổi khi thêm/sửa file trong bundle Gate 0 tiếp theo;
+  manifest cập nhật theo từng commit/handoff.
+
+**Cách reproduce** (PowerShell):
+
+```powershell
+Get-ChildItem -Recurse . |
+  Where-Object { -not $_.PSIsContainer -and $_.Name -notmatch '\.d\.ts$|node_modules|\.git' } |
+  ForEach-Object {
+    $h = (Get-FileHash -Algorithm SHA256 $_.FullName).Hash
+    $rel = $_.FullName -replace 'D:\\CodeApp\\Hrp-Crm\\',''
+    [PSCustomObject]@{ Hash = $h; Path = $rel }
+  } | Format-Table -AutoSize
+```

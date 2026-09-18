@@ -1,0 +1,443 @@
+// packages/integration-store/prisma/schema.prisma — CORE/1.3 + CORE/1.8
+//
+// Prisma schema cho Integration store RIÊNG (PostgreSQL).
+// Boundaries (Gate 0 freeze + Implementation-Backlog §Task 1.3):
+//  - Schema name: `integration` (KHÔNG phải `public`; HRP core ở schema `hrp_core` riêng).
+//  - Cross-DB FK: KHÔNG có. Canonical HRP IDs (LaborProfileId, ClientContactId,
+//    ConversationId, PlacementCaseId...) chỉ là scalar fields (String).
+//  - KHÔNG copy LaborProfile / PlacementCase / ClientContact canonical tables.
+//    Integration chỉ tham chiếu opaque HRP IDs (đã được verify ở HRP runtime).
+//  - Mọi query đều scoped theo `organizationId` + `provider` + `connectionId`
+//    ở runtime repository (enforced qua helper `assertScopedWhere`).
+//  - Pin contracts 0.0.8-g0.8-fixes (Gate 0 freeze).
+//
+// CORE/1.8 AC4: ReconciliationEntry model added for UNKNOWN delivery investigation.
+//  - Tracks investigation state when DeliveryReportingEvent.state = 'UNKNOWN'.
+//  - NEVER auto-resolve UNKNOWN to DELIVERED.
+//
+// Models:
+//  - ExternalContactLink      : link external contact ↔ canonical target.
+//  - ExternalConversationLink : link external conversation ↔ canonical conversation,
+//                                giữ history/currentRevision.
+//  - ExternalEventReceipt     : provider payload hash + state + lease + command refs.
+//  - DispatchIntent           : durable processing intent (no dual-write gap với receipt).
+//  - ReconciliationEntry      : CORE/1.8 UNKNOWN delivery investigation records.
+//
+// Tất cả aggregate version là Int non-negative; monotonic ở application layer.
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["integration"]
+}
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+  binaryTargets   = ["native"]
+}
+
+enum LinkState {
+  EXACT_MATCH
+  POSSIBLE_MATCH
+  UNRESOLVED
+  @@schema("integration")
+}
+
+enum TargetKind {
+  TALENT
+  CLIENT
+  @@schema("integration")
+}
+
+enum ConversationKind {
+  TALENT
+  CLIENT
+  INTERNAL
+  UNKNOWN
+  @@schema("integration")
+}
+
+enum EventDuplicateKind {
+  DEDUPE
+  OUT_OF_ORDER
+  CORRECTION
+  GAP
+  UNKNOWN
+  @@schema("integration")
+}
+
+enum EventReceiptState {
+  // Receipt committed; chưa leased cho worker.
+  PENDING
+  // Worker đã claim; đang xử lý.
+  LEASED
+  // Worker commit dispatch intent + intent đã vào outbox (durable).
+  DISPATCH_COMMITTED
+  // Retry scheduled — không được xóa; giữ lịch sử attempts.
+  RETRY_SCHEDULED
+  // Terminal: thành công.
+  DELIVERED
+  // Terminal: lỗi không retry được — sang DLQ (no auto-delete).
+  DEAD_LETTERED
+  // Quarantine: PII path residency gate deferred; không auto-process.
+  QUARANTINED
+  @@schema("integration")
+}
+
+enum IntentStatus {
+  // Intent ghi cùng receipt; chưa pick.
+  PENDING
+  // Worker đã pick; lease owned.
+  LEASED
+  // Provider call dispatched; chờ callback.
+  DISPATCHED
+  // ACK từ provider.
+  ACK_RECEIVED
+  // Provider reported delivered/sent.
+  DELIVERED
+  // Provider reported failed/UNKNOWN/suppressed.
+  FAILED
+  // Quyết định cuối (no rollback).
+  TERMINAL
+  // CORE/1.8 AC4: UNKNOWN delivery → investigation required (not DELIVERED/FAILED).
+  // Reconciliation workflow in progress.
+  INVESTIGATION_PENDING
+  @@schema("integration")
+}
+
+// =============================================================================
+// ExternalContactLink — external contact ↔ canonical target.
+// =============================================================================
+model ExternalContactLink {
+  // Synthetic primary key — runtime domain có id opaque riêng (`linkId`).
+  linkId              String   @id
+  schemaVersion       String   @db.VarChar(8)
+  organizationId      String   @db.VarChar(64)
+  provider            String   @db.VarChar(64)
+  connectionId        String   @db.VarChar(128)
+  externalAccountId   String   @db.VarChar(128)
+  externalContactId   String?  @db.VarChar(256)
+
+  state               LinkState
+
+  // ── EXACT_MATCH target (Talent hoặc Client) ───────────────
+  matchedTargetKind        TargetKind?
+  matchedLaborProfileId    String?      @db.VarChar(128)
+  matchedLaborProfileVersion Int?
+  matchedClientContactId   String?      @db.VarChar(128)
+  matchedClientContactVersion Int?
+
+  // ── POSSIBLE_MATCH candidateReference ─────────────────────
+  candidateReviewQueueEntryId String? @db.VarChar(128)
+  candidateRecordedAt         DateTime?
+
+  // ── Audit / version ───────────────────────────────────────
+  aggregateVersion   Int      @default(0)
+  lastAttemptedAt    DateTime?
+  evidenceRefsJson   Json?
+  // Recorded-by note (scalar opaque); không chứa PII.
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([organizationId, provider, connectionId, externalAccountId, externalContactId], name: "uq_contact_link_scope")
+  @@unique([linkId])
+  @@index([organizationId, provider, connectionId, state])
+  @@index([matchedLaborProfileId], name: "ix_link_laborprofile")
+  @@index([matchedClientContactId], name: "ix_link_clientcontact")
+  @@schema("integration")
+}
+
+// =============================================================================
+// ExternalConversationLink — external conversation ↔ canonical conversation,
+//                              giữ history/currentRevision.
+// =============================================================================
+model ExternalConversationLink {
+  linkId              String   @id
+  schemaVersion       String   @db.VarChar(8)
+  organizationId      String   @db.VarChar(64)
+
+  conversationId          String   @db.VarChar(128)  // HRP canonical scalar (no FK)
+  conversationVersion     Int      @default(0)
+  conversationKind        ConversationKind
+  primaryTargetKind       TargetKind?
+  primaryLaborProfileId   String?  @db.VarChar(128)
+  primaryClientContactId  String?  @db.VarChar(128)
+
+  // Array of external refs (provider-agnostic mapping) — JSON.
+  externalRefsJson        Json
+  currentRevision         Int      @default(0)
+  // History revisions (array of {revisionId, recordedAt, note?}).
+  historyRevisionsJson    Json?
+  updatedAt               DateTime @updatedAt
+  createdAt               DateTime @default(now())
+
+  @@unique([linkId])
+  @@index([organizationId, conversationId, currentRevision])
+  @@index([organizationId, primaryLaborProfileId])
+  @@index([organizationId, primaryClientContactId])
+  @@schema("integration")
+}
+
+// =============================================================================
+// ExternalEventReceipt — webhook receipt lifecycle.
+// =============================================================================
+model ExternalEventReceipt {
+  receiptId         String   @id
+  schemaVersion     String   @db.VarChar(8)
+  organizationId    String   @db.VarChar(64)
+  provider          String   @db.VarChar(64)
+  connectionId      String   @db.VarChar(128)
+  eventId           String   @db.VarChar(128)
+
+  // SHA-256 hex (64 chars) của provider payload (server-set).
+  payloadDigest     String   @db.Char(64)
+  state             EventReceiptState @default(PENDING)
+  duplicateKind     EventDuplicateKind @default(UNKNOWN)
+
+  // Attempt tracking + lease (worker 1.4 owner; store có schema sẵn).
+  attempts          Int      @default(0)
+  leaseOwner        String?  @db.VarChar(128)
+  leaseExpiresAt    DateTime?
+  // CORE/1.4 fencing: opaque token claim writes, completion checks token.
+  fencingToken      String?  @db.VarChar(128)
+  leaseFencedAt     DateTime?
+
+  // Cross-refs: server-set correlation + command refs (scalar, opaque).
+  correlationId     String?  @db.VarChar(128)
+  commandRefsJson   Json?
+
+  // CORE/1.4 — idempotency key persisted for retry. Worker preserves key.
+  idempotencyKey    String?  @db.VarChar(256)
+
+  // Audit timestamps.
+  firstSeenAt       DateTime @default(now())
+  nextAttemptAt     DateTime?
+  resolvedAt        DateTime?
+  reasonCode        String?  @db.VarChar(64)
+
+  // Quan trọng: payload KHÔNG có raw media; chỉ opaque refs (JSON).
+  evidenceRefsJson  Json?
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([organizationId, provider, connectionId, eventId], name: "uq_receipt_event_id")
+  @@index([organizationId, state])
+  @@index([organizationId, payloadDigest])
+  @@index([leaseExpiresAt])
+  @@index([nextAttemptAt], name: "ix_receipt_next_attempt")
+  @@index([fencingToken], name: "ix_receipt_fencing_token")
+  @@schema("integration")
+}
+
+// =============================================================================
+// DispatchIntent — durable processing intent (no dual-write gap với receipt).
+//   Một DispatchIntent ghi cùng transaction với ExternalEventReceipt commit.
+// =============================================================================
+model DispatchIntent {
+  intentId             String   @id
+  schemaVersion       String   @db.VarChar(8)
+  organizationId      String   @db.VarChar(64)
+  receiptId           String   @db.VarChar(128)
+  // idempotency key + correlation (scalar, tracking only).
+  idempotencyKey      String?  @db.VarChar(256)
+  correlationId       String?  @db.VarChar(128)
+  // Source / target template refs (opaque scalars).
+  intentSource        String   @db.VarChar(64)
+  intentTargetJson    Json
+  status              IntentStatus @default(PENDING)
+  attempts            Int      @default(0)
+  leaseOwner          String?  @db.VarChar(128)
+  leaseExpiresAt      DateTime?
+  // CORE/1.4 fencing: opaque token claim writes, completion checks token.
+  fencingToken        String?  @db.VarChar(128)
+  leaseFencedAt       DateTime?
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([organizationId, receiptId, intentId], name: "uq_intent_receipt")
+  @@index([organizationId, status])
+  @@index([leaseExpiresAt])
+  @@index([fencingToken], name: "ix_intent_fencing_token")
+  @@schema("integration")
+}
+
+// =============================================================================
+// ReconciliationEntry — CORE/1.8 AC4: UNKNOWN delivery investigation records.
+//   Tracks investigation state when DeliveryReportingEvent.state = 'UNKNOWN'.
+//   UNKNOWN never auto-resolves to DELIVERED — requires explicit human/system
+//   resolution: CONFIRMED, FAILED, or RETRY.
+// =============================================================================
+enum ReconciliationStatus {
+  // Initial state when UNKNOWN received; investigation in progress.
+  PENDING_INVESTIGATION
+  // Actively investigating (e.g. querying provider logs, checking cache).
+  INVESTIGATING
+  // Confirmed delivered after investigation.
+  RESOLVED_CONFIRMED
+  // Confirmed failed after investigation (no retry possible).
+  RESOLVED_FAILED
+  // Re-queued for delivery attempt after investigation.
+  RESOLVED_RETRY
+  @@schema("integration")
+}
+
+model ReconciliationEntry {
+  entryId           String   @id
+  schemaVersion     String   @db.VarChar(8)
+  organizationId    String   @db.VarChar(64)
+  intentId          String   @db.VarChar(128)
+  receiptId         String   @db.VarChar(128)
+
+  // State machine: PENDING_INVESTIGATION → INVESTIGATING → RESOLVED_* (terminal).
+  status            ReconciliationStatus @default(PENDING_INVESTIGATION)
+
+  // Why UNKNOWN: e.g. 'STALE_CACHE', 'HRP_OFFLINE', 'PROVIDER_TIMEOUT', 'UNKNOWN_REASON'.
+  reasonCode        String   @db.VarChar(64)
+  // Human/system note for audit trail.
+  investigationNote String?  @db.VarChar(1024)
+
+  // Actor who initiated investigation.
+  investigatorActor String   @db.VarChar(128)
+  investigatedAt    DateTime @default(now())
+
+  // Actor who resolved (null until RESOLVED_*).
+  resolvedByActor   String?  @db.VarChar(128)
+  resolvedAt        DateTime?
+
+  // Resolution: 'CONFIRMED' | 'FAILED' | 'RETRY'.
+  resolution        String?  @db.VarChar(32)
+  // Reason for resolution.
+  resolutionNote    String?  @db.VarChar(1024)
+
+  // Retry tracking: if RETRY, intent re-queued with this idempotency key.
+  retryIdempotencyKey String? @db.VarChar(256)
+
+  // Version for optimistic locking on resolution.
+  aggregateVersion  Int      @default(0)
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([intentId], name: "uq_reconciliation_intent")
+  @@index([organizationId, status])
+  @@index([reasonCode])
+  @@index([investigatedAt])
+  @@schema("integration")
+}
+
+// =============================================================================
+// IntakeCheckpoint — CORE/1.6 durable intake workflow state.
+//   Mỗi intake submission có 1 checkpoint row bound draftDigest + intakeRevisionId.
+//   appliedStepsJson ghi các step đã APPLIED; resume sẽ skip chúng.
+//   State machine: RUNNING → (PARTIAL|COMPLETED|FAILED|REVIEW_PENDING).
+// =============================================================================
+enum IntakeCheckpointState {
+  RUNNING
+  PARTIAL
+  COMPLETED
+  FAILED
+  REVIEW_PENDING
+  @@schema("integration")
+}
+
+model IntakeCheckpoint {
+  checkpointId        String                @id
+  schemaVersion       String                @db.VarChar(8)
+  organizationId      String                @db.VarChar(64)
+  intakeRevisionId    String                @db.VarChar(128)
+  draftDigest         String                @db.Char(64)
+  canonicalId         String?               @db.VarChar(128)
+  canonicalVersion    Int?
+
+  currentStep         String?               @db.VarChar(64)
+  state               IntakeCheckpointState @default(RUNNING)
+
+  // Array of applied step names (e.g. ["IDENTITY","PROFILE"]).
+  appliedStepsJson    Json                  @default("[]")
+  // Map stepName → result (canonicalId, version, errorCode, etc.).
+  stepResultsJson     Json                  @default("{}")
+  lastErrorJson       Json?
+
+  correlationId       String?               @db.VarChar(128)
+  idempotencyKey      String?               @db.VarChar(256)
+
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  @@unique([organizationId, intakeRevisionId], name: "uq_intake_checkpoint_org_revision")
+  @@index([organizationId, state])
+  @@index([idempotencyKey])
+  @@schema("integration")
+}
+
+// =============================================================================
+// RecoveryAction — CORE/1.8 AC5 durable recovery audit trail.
+//   Tracks recovery attempts for stuck receipts/intents so that concurrent
+//   reconcilers (or repeated recovery calls) are idempotent.
+//
+// Design:
+//   - idemKey = unique(itemType + itemId) → only one RecoveryAction per stuck item.
+//   - RecoveryStatus: PENDING → APPLIED | SKIPPED | FAILED (terminal).
+//   - actor = "reconciler:<schedulerId>" or "manual:<operatorId>".
+//   - Stored in `integration` schema ONLY — NO HRP core tables touched.
+// =============================================================================
+
+enum RecoveryStatus {
+  // Recovery action created; item recovery not yet applied.
+  PENDING
+  // Recovery applied: stuck item reset to PENDING for reprocessing.
+  APPLIED
+  // Recovery skipped: another reconciler already handled it.
+  SKIPPED
+  // Recovery failed: terminal, requires manual intervention.
+  FAILED
+  @@schema("integration")
+}
+
+enum RecoveryItemType {
+  RECEIPT
+  INTENT
+  MAPPING
+  @@schema("integration")
+}
+
+enum RecoveryActionKind {
+  RESET_TO_PENDING
+  RECLAIM_LEASE
+  DEAD_LETTER
+  SKIP
+  @@schema("integration")
+}
+
+model RecoveryAction {
+  // Synthetic PK — not the idempotency key.
+  recoveryId       String            @id
+  // Idempotency key: itemType + itemId must be UNIQUE.
+  // Using composite unique constraint, not a PK.
+  itemType         RecoveryItemType
+  itemId           String            @db.VarChar(128)
+  action           RecoveryActionKind
+  // Who triggered this recovery.
+  actor            String            @db.VarChar(256)
+  // Snapshot of stuck state at time of recovery (JSON).
+  // E.g. { state: "LEASED", leaseExpiresAt: "2026-09-15T10:00:00Z", attempts: 3 }
+  snapshotJson     Json?
+
+  status           RecoveryStatus    @default(PENDING)
+  // Timestamp when recovery was created.
+  createdAt        DateTime          @default(now())
+  // Timestamp when recovery completed (APPLIED/SKIPPED/FAILED).
+  completedAt      DateTime?
+
+  // Human-readable reason or error detail.
+  reason           String?           @db.VarChar(512)
+
+  @@unique([itemType, itemId], name: "uq_recovery_idem_key")
+  @@index([status])
+  @@index([actor])
+  @@index([createdAt])
+  @@schema("integration")
+}

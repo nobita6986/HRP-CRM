@@ -1,0 +1,31 @@
+# CORE/1.12 — POST-AUDIT Delta Manifest
+# Date: 2026-09-18T02:05:53.853Z
+# Generator: scripts/generate-manifest-1.12-postaudit.mjs (SHA-256)
+# Total files: 5
+#
+# This manifest captures ONLY the post-audit follow-up delta:
+#   - manifest-readonly-1.12.test.mjs: rewritten to use --output
+#     scratch path so the test never touches the bundled audit-PASS
+#     manifest at docs/contracts/handoff-core-1.12.manifest.txt.
+#   - generate-manifest-1.12.mjs: added --output flag (generate only).
+#   - handoff-core-1.12.status.md: corrected test counts
+#     (service 12→16, business delta 48, total 52).
+#   - handoff-core-1.12.md: minor corrections only.
+#
+# The audit-PASS manifest at:
+#   docs/contracts/handoff-core-1.12.manifest.txt
+# is PRESERVED UNCHANGED as immutable evidence of the original
+# CORE/1.12 snapshot. DO NOT regenerate that file from this delta.
+#
+# Format: FILE|<repo-relative-path>|<sha256-hex>
+#
+
+FILE|apps/context-panel/tests/manifest-readonly-1.12.test.mjs|0436ae716e586f51ad9f26781ce3c12428a0ae7d53b64e6d8dea93bde99ac25f
+FILE|apps/context-panel/scripts/generate-manifest-1.12.mjs|9760c0edea5e4bc0bd724d1ec8a020055af24fb43caabc03143865b27109b275
+FILE|docs/contracts/handoff-core-1.12.status.md|b59d506f68e3fd0dc713bea181980b32d953f9ab2916ad63711321c3b6413907
+FILE|docs/contracts/handoff-core-1.12.md|2100d900eb8662aa9f3dd828fabea5cde5da81b194adfbbba06f38a0d7128c0f
+FILE|apps/context-panel/scripts/generate-manifest-1.12-postaudit.mjs|8b9d9cb65747a8103c0dc8baef014e9865891b9c245d8ce7d84f68084ae2a799
+
+# Verification (READ-ONLY):
+#   node scripts/generate-manifest-1.12-postaudit.mjs --verify
+#   node scripts/generate-manifest-1.12-postaudit.mjs --check

@@ -1,0 +1,44 @@
+# Manifest cho gói G0/0.3g–0.3h
+
+HEAD: 414c54bfa2e227ec1a25694310e48908e0d67abe
+Branch: (chưa commit; HEAD hiện tại = commit connector v1.1)
+Date: 2026-09-13
+Package version: 0.0.4-g0.3g
+
+Manifest chứa SHA-256 của source/tests/docs trong bundle này.
+Manifest tách khỏi file handoff để tránh tự tham chiếu hash (Owner chỉ thị).
+
+## Self-reference (computed last)
+
+```
+43138D761C8FA4E2E387D92C241BC55686B2324C649949A9CFA6E80FB9F89AC8  docs/contracts/handoff-g0-0.3g-0.3h.manifest.txt
+```
+
+## Source (packages/contracts/src/)
+
+```
+5F74E917491F7F9F9DD5A31E94555AE31490DAE08276EAD3DC3E446D48787729  packages/contracts/src/commands/identity.ts
+51F7A099ED5B213F94D132BA26950A2E720EB7CFAD0C4B2064D6DD76D1975CC4  packages/contracts/src/commands/availability.ts
+6C432DE1FC97887CD1C1723FA95BBC1E127EE0B5C2DCF572775C3139D04B997A  packages/contracts/src/commands/suppression.ts
+78BE65EDFBBC40BE4BD336E5E76DEDD9DC92DDD1A9003DC7CA9DAEF617E29407  packages/contracts/src/commands/next-action.ts
+9CE0ADDF76152FC590D3911952D1632E95A3ADCC1553424957A2F82CD49BD133  packages/contracts/src/commands/scheduling.ts
+1B12BD132E92668F61862966749A6F528A23722139E197E927311047D94C904A  packages/contracts/src/commands/outbox.ts
+5E5C5E0CC12E5BCF5F893382670CCFFB4C457A05DBF124B7A3B60AFF5F9ACB42  packages/contracts/src/commands/gateway.ts
+F26C66539A6827CB4C58F756369A485B13614A83ABC95DA17FD2A4A25B60E843  packages/contracts/src/commands/providers.ts
+79DB5C805E90277FF1278F36C06E01EEE87D703F5106B2C3B1EFF4722E0134E0  packages/contracts/src/commands/ports.ts
+```
+
+(Các file khác trong src/ có hash ổn định theo bản trước — xem
+`handoff-g0-0.3e-0.3f.manifest.txt` cho hash baseline và snapshot
+file mới đính kèm ở handoff bundle.)
+
+## Tests (packages/contracts/tests/)
+
+```
+C2F42CA150A16B5860930D5E0FAF7090F787B50C1FB7667C2D74BD6027025E1C  packages/contracts/tests/gateway-providers-ports.test.mjs
+07D781707C717416E6587C3C78C843116DB1274B2523ED8D3AD24BC0F6A3094D  packages/contracts/tests/outbox.test.mjs
+```
+
+## Docs
+
+Hash các file docs được ghi trong handoff chính (xem `handoff-g0-0.3g-0.3h.md`).

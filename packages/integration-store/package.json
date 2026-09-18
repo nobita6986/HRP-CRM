@@ -1,0 +1,63 @@
+{
+  "name": "@hrp-engagement/integration-store",
+  "version": "1.2.0-core1.6",
+  "private": true,
+  "description": "CORE/1.3+1.4 — Integration store + durable worker leasing (Prisma + PostgreSQL). Pin contracts 0.0.8-g0.8-fixes. Không FK sang HRP canonical.",
+  "type": "module",
+  "main": "dist/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "import": "./dist/client.js"
+    },
+    "./worker": {
+      "types": "./dist/worker/index.d.ts",
+      "import": "./dist/worker/index.js"
+    },
+    "./worker/clock": {
+      "types": "./dist/worker/clock.d.ts",
+      "import": "./dist/worker/clock.js"
+    },
+    "./worker/retry": {
+      "types": "./dist/worker/retry.d.ts",
+      "import": "./dist/worker/retry.js"
+    },
+    "./worker/lease": {
+      "types": "./dist/worker/lease.d.ts",
+      "import": "./dist/worker/lease.js"
+    },
+    "./errors": {
+      "types": "./dist/errors.d.ts",
+      "import": "./dist/errors.js"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc",
+    "test:unit": "npm run build && node --test tests/unit/*.test.mjs",
+    "test:integration": "npm run build && node --test tests/integration/*.test.mjs",
+    "test": "npm run test:unit",
+    "migrate:deploy": "node ./scripts/migrate-deploy.mjs",
+    "migrate:reset": "node ./scripts/migrate-reset.mjs"
+  },
+  "dependencies": {
+    "@hrp-engagement/contracts": "file:../contracts",
+    "@prisma/client": "^5.22.0",
+    "zod": "3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.2",
+    "@types/pg": "8.11.10",
+    "embedded-postgres": "17.6.0-beta.15",
+    "pg": "8.13.1",
+    "prisma": "5.22.0",
+    "typescript": "5.7.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

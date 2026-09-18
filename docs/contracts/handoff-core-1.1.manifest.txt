@@ -1,0 +1,71 @@
+SHA-256 (CORE/1.1 — CanonicalHrpGateway deterministic mock manifest)
+HEAD: 414c54bfa2e227ec1a25694310e48908e0d67abe (Gate 0 freeze)
+Date: 2026-09-14 09:50 (UTC+7)
+Coder: T1
+
+T1 self-check: 466/466 fixtures PASS toàn project
+  - contracts package: 398/398 (Gate 0 freeze)
+  - integration-api: 35/35 (9 CORE/1.0 updated + 26 CORE/1.1 gateway)
+  - config: 13/13
+  - integration-worker: 9/9
+  - context-panel: 11/11
+
+Pin contracts 0.0.8-g0.8-fixes (Gate 0 freeze giữ nguyên).
+
+## Mới (CORE/1.1)
+
+F98AD364D1BC953CC17E718BCDEF2756F1C4540CE9CBB92B2812A12257E34998  apps/integration-api/src/gateway/types.ts
+894877AF6175FEC6CC940E9D243207C1E936956D0F93C60B14CF27D01056A059  apps/integration-api/src/gateway/scenarios.ts
+1D54A3B9757C34C3B0C51F2783408E5EB18F46953F799494D9737A2B48323143  apps/integration-api/src/gateway/mock-gateway.ts
+965088E6A48F9036167BD5D017508CC28123BEC497A11DA34525995AE252EBE9  apps/integration-api/src/gateway/ledger.ts
+3EC4BD762B8BC158DD3E75ECADF4EEC6D0DED733A835C7338EA5F42D8A902C18  apps/integration-api/src/gateway/index.ts
+6F20A5AE43356CB5CD9257A8C2886F277B03098152F680F7301539BB9413B478  apps/integration-api/tests/gateway.test.mjs
+D21B9E40E3E0DA70A38F499C70269C989323E2E0AC763E79FF350C6D19C2437C  docs/contracts/handoff-core-1.1.md
+
+## Sửa (CORE/1.1 — Owner instruction)
+
+C65E7CAA24B76643A8DF6920C0997F02F784D2915E65C58B48BE7DA9FA3B3B28  apps/integration-api/src/server.ts
+951B6FB24A8CF822EA3098CD578BB991C9950849386C44D9BC051DBCE9A0BFAC  apps/integration-api/package.json
+045D1C613AE1B75A5F4EEB6B5A2EB99CFDCED5CD03365A5DE904F0D0F794E033  apps/integration-api/.env.synthetic.example
+FA350A7397B2BB28F79F8B2F09D5BDBEA68A8BA52B474DD8F7B96255BD3C407F  apps/integration-api/tests/server.test.mjs
+
+## Không đụng (Gate 0 freeze + ràng buộc)
+
+- packages/contracts/src/** — Gate 0 freeze.
+- packages/contracts/tests/** — Gate 0 freeze.
+- packages/contracts/package.json — version 0.0.8-g0.8-fixes giữ nguyên.
+- packages/contracts/tsconfig.json — không sửa.
+- packages/config/** — không sửa.
+- apps/integration-worker/** — không sửa.
+- apps/context-panel/** — không sửa.
+- docs/contracts/decision-register.md — không sửa.
+- docs/contracts/authorization-policy-matrix.md — không sửa.
+- docs/contracts/inventory.md — không sửa.
+
+## Self-reference (KHÔNG tự ghi)
+
+- docs/contracts/handoff-core-1.1.manifest.txt (file này)
+- docs/contracts/handoff-core-1.1.md (chính nó KHÔNG tự ghi — pattern cũ)
+- packages/config/dist/** (build output)
+- apps/integration-api/dist/** (build output)
+- node_modules/ ở mọi package
+
+## Audit status
+
+CORE/1.1: **Auditor PASS** — B1 (ACCEPTED operation shape drift) đã FIXED
++ CLOSED bởi T1 (2026-09-14); verdict Auditor độc lập được Owner xác nhận
+qua Chủ nhân (hội thoại 2026-09-14).
+
+CORE/1.1 self-check evidence:
+  - integration-api: 30/30 gateway tests PASS (B1 fix: DU→union)
+  - Full suite: 84/84 PASS (gateway + receiver + server)
+  - receiver.int: 18/18 PASS (embedded-postgres)
+
+Boundary changes (CORE/1.1):
+- Mock + tier × method capability check (NEW).
+- Cache strategy (NEW — same key+payload cached; khác payload conflict).
+- HTTP routes mới: POST /mock/gateway/call, GET /mock/gateway/log.
+
+Tất cả chỉ expose trong mock mode (assertNotProductionMock chặn production).
+
+- Hết manifest -

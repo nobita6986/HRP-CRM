@@ -1,0 +1,50 @@
+# Manifest cho gói G0/0.7 (+ 0.6 bổ sung)
+
+HEAD: 414c54bfa2e227ec1a25694310e48908e0d67abe
+Branch: main
+Date: 2026-09-13
+Package version: 0.0.7-g0.7
+
+Manifest chứa SHA-256 của source/tests/docs trong bundle này.
+Manifest tách khỏi file handoff để tránh tự tham chiếu hash (Owner chỉ thị).
+
+## Source sửa (Gate 0/0.7 — PACKAGE_VERSION bump)
+
+```
+B6446FE924E5502631414C72144434FCBA93FA324A3C245A070470CBE10F5E55  packages/contracts/src/index.ts
+4DFC386FCA0BCF0D96737ED98C68C8916159524C838DBEC3D64440F72F4EAE7E  packages/contracts/package.json
+```
+
+## Tests mới (Gate 0/0.7)
+
+```
+BB50A62712DA78877E86FB370A3824332D259015AF0741C5E68299D615C8291F  packages/contracts/tests/fixtures-coverage-0.7.test.mjs
+```
+
+Fixtures: 313 → **372** (+59). Toàn bộ Gate 0 bundle 0.3a–0.7 PASS.
+
+## Docs mới (Gate 0/0.7 — README, CHANGELOG)
+
+```
+B08A271AC1085344E82CC2D8060F0C2BE2AEB556D30D2720EB33A35E1AE3D5AC  packages/contracts/README.md
+B8DC89064AEF8A5D392D2522B25BA7ED3785A080103BAF504FACECAA4180D957  packages/contracts/CHANGELOG.md
+```
+
+## Docs bổ sung 0.6 (Gate 0/0.6 — matrix + handoff/manifest 0.6)
+
+```
+134A0E879F1E21C2DE5B5F8AB067AAB9FD8B2DCC3BAE505D9AA2177C07E50EB5  docs/contracts/authorization-policy-matrix.md
+735FA72F999706A1A4C622B8659365FFAF210CFC3633C4CC6498B3A21BBB020A  docs/contracts/handoff-g0-0.6.md
+7F7851030BE68EDD1C3E6832958C2DC0A00EB97AE4A2790CEFCDE761A34551D6  docs/contracts/handoff-g0-0.6.manifest.txt
+```
+
+## Docs mới (Gate 0/0.7 — handoff + manifest 0.7)
+
+```
+0E7081A0384A769831CDC5743761E5E5AAED1E055255D0F0D625A827F380F174  docs/contracts/handoff-g0-0.7.md
+```
+
+## Self-reference
+
+Hash file này sẽ được ghi ở dòng cuối handoff bundle; KHÔNG tự ghi
+trong manifest để tránh vòng lặp hash.

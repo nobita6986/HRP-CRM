@@ -1,0 +1,31 @@
+{
+  "name": "@hrp-engagement/config",
+  "version": "1.0.0-core1.0",
+  "private": true,
+  "description": "CORE/1.0 — shared runtime config types and loader cho apps/integration-api, apps/integration-worker, apps/context-panel. Pin exact contracts version đã freeze (Gate 0).",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "@hrp-engagement/contracts": "file:../contracts",
+    "zod": "3.24.2"
+  },
+  "devDependencies": {
+    "typescript": "5.7.3",
+    "@types/node": "22.10.2"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

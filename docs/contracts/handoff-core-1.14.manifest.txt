@@ -1,0 +1,35 @@
+# CORE/1.14 — Handoff Manifest
+# Date: 2026-09-18T02:45:06.748Z
+# Generator: scripts/generate-manifest-1.14.mjs (SHA-256)
+# Total files: 16
+#
+# CORE/1.14 delta from CORE/1.13 baseline:
+#  - NEW: 5 files (observability module)
+#  - NEW: 6 test files (unit + regression)
+#  - SHARED: 4 files (server.ts, ui/app.tsx, assistant/service.ts, orchestrator-wire.ts)
+#    orchestrator-wire.ts added in B1 (correlation propagation);
+#    assistant/service.ts added in B1 (NOT_FOUND → 404 mapping).
+#
+# Format: FILE|<repo-relative-path>|<sha256-hex>
+#
+
+FILE|apps/context-panel/src/observability/correlation.ts|105a8669fbc8824c791e1e0da2d2f1164dc6f66c347a0a058eee1487cbae16ea
+FILE|apps/context-panel/src/observability/metrics.ts|c65d27e9f415cb134d8db8e720b5dbe6a73daeb04b8ee861eb2d3fea93efc974
+FILE|apps/context-panel/src/observability/log-scrubber.ts|2a28a460775b0f2ed6c4d2daee6ed90d356ed316c663a81a829760cd0bb265ed
+FILE|apps/context-panel/src/observability/kill-switch.ts|1f7af518bb43648d0bed07dc652c4a7b996ceb6bbaaa6d7ea106e5bd08c773bb
+FILE|apps/context-panel/src/observability/index.ts|c98f2480dbe4a9e5118be773223848b520fea682ed3779292c2d7629fa254e3e
+FILE|apps/context-panel/tests/observability.test.mjs|75ff7dd01421396946700c83b8810a1ed73387cf5d7e76825786c191c49a4f68
+FILE|apps/context-panel/tests/kill-switch.test.mjs|1020d08f62c57dcefd47036ff2f28307c0d664fabc623c4963eb9ad6b2bd04af
+FILE|apps/context-panel/tests/recovery.test.mjs|542e231c13c51055d184e851705148d49e2d4497755727d128110bf49dc8515e
+FILE|apps/context-panel/tests/security-regression-1.14.test.mjs|4064d99aa645b9e0bdec72621d7861cd5251219dee39d4858e7c9a81d8769868
+FILE|apps/context-panel/tests/correlation-trace.test.mjs|efd9a50070faad4a7d988cfca6e9af51bbcf583ab303ebf65f916734c03902b9
+FILE|apps/context-panel/tests/log-scrubber.test.mjs|86571316d5a97dc4599938643e7a33e3551e7e6135a3118684fef96aa47291ba
+FILE|apps/context-panel/scripts/generate-manifest-1.14.mjs|33bab0a2b0002b694d8bef01ea52f4ecaf65bcfd63880515cd2c8d89cd337b49
+FILE|apps/context-panel/src/server.ts|ca2341245c2ad68e551ad82b16853f9bc664309aba4067baed064bff99e02780
+FILE|apps/context-panel/src/ui/app.tsx|a6db23243471831bccac6112be99938ae8272ae6a09f1d9feb0574a393aebc8a
+FILE|apps/context-panel/src/assistant/service.ts|21b0af9a4bcde5e2faaf3d2450381a1c55dc7cff3f8464890ba1b427a2415c16
+FILE|apps/context-panel/src/orchestrator-wire.ts|6c86da5fe941e82efd20d7feff5f601f0201a484d7733bf1d460cb1a95b09441
+
+# Verification (READ-ONLY):
+#   node scripts/generate-manifest-1.14.mjs --verify
+#   node scripts/generate-manifest-1.14.mjs --check

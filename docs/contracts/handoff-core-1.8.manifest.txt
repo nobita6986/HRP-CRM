@@ -1,0 +1,73 @@
+# CORE/1.8 manifest — Retry, DLQ, Reconciliation & Outbox Handoff Mock
+# SHA-256 hashes for all files in CORE/1.8 implementation.
+#
+# Delta history:
+#  - CORE/1.8: Retry/DLQ/Outbox/Reconciliation implementation
+#  - AC1: Retryable errors with bounded exponential backoff/jitter
+#  - AC2: DLQ with safe metadata, redrive scope, DNC guards
+#  - AC3: Outbound intent simulation → durable receipt → ACK
+#  - AC4: UNKNOWN reconcile scenario, no fake success
+#  - AC5: Reconciler for stuck receipts/jobs/mappings
+#  - Blockers fixed: harness outbox.test.mjs + manifest missing files + concurrent dispatchers test
+
+# ── integration-api: server wiring ──────────────────────────────────────────────
+
+2B91FAE714AAFD18DECF3DA3A2C43626C9CF450E3DFB9C0446D374A9ED332CBE  apps/integration-api/src/server.ts
+
+# ── DLQ (AC2) ───────────────────────────────────────────────────────────────
+
+87A04C6DE7BD3C91A29357AF3A5ABA49B03E7C3B83984069A7BBE3A782EEF612  apps/integration-api/src/dlq/http-handler.ts
+F7FC3ED2A57725F0334E5C641F8135094D829AE2FD17684F066403CC5441D27B  apps/integration-api/src/dlq/index.ts
+
+# ── Outbox (AC3) ─────────────────────────────────────────────────────────────
+
+85D2572E13689336AFF0A100F6E22430639FD45BC8D68568119EFC48F6BFAE6F  apps/integration-api/src/outbox/dispatcher.ts
+34C8953089412A1351FCDAABD5CEAC35F8E4B9B98B10E603A4D9EF3EB1EE8589  apps/integration-api/src/outbox/delivery-receipt.ts
+5C9EAA72F1271B6298D7A83DC36EB310036CC80F4079BEBD1D286D9CC73C42BF  apps/integration-api/src/outbox/delivery-reporting.ts
+B2D6B1E98F343C53B25F8C76EE766D928D1313DAEC2F52EF8DDBAD3B9E708F78  apps/integration-api/src/outbox/http-handler.ts
+12A66C651418B2BA3BBC465C7AD5ED77BF7A957D5FA0E592C1489FB7A942DF03  apps/integration-api/src/outbox/reconciliation.ts
+5A680618FA24F87E7F5A4C2870DDF9FD6E63DF99C9BE24EF1773395A5EFD3EC5  apps/integration-api/src/outbox/unknown-handler.ts
+6F7DF84AB2EDDCABA3D42F737A82669CB072C73D5C84B2FD499FD1B8FB57ED69  apps/integration-api/src/outbox/index.ts
+# [BLOCKER 2 FIX] AC3 HTTP handler for intent/receipt/report routes
+9EF00968F09088EFB25E01EE85F0493E8854E5B6FCF0F2B49FBA96632EBC3EEA  apps/integration-api/src/outbox/ac3-handler.ts
+
+# ── Reconciler (AC5) ──────────────────────────────────────────────────────────
+
+B91172F012C2B537A0E140DA7FAF4EF3894A8EADD9D49985EAFFCC2D7080143C  apps/integration-api/src/reconciler/http-handler.ts
+70395B30D679B5D476C70C3F2A1DA96D128F5E7FE3A9E4181F946711CFF8909E  apps/integration-api/src/reconciler/index.ts
+E7AC811FCB5638286190140F836E31A231093B99B29DD07CDCCB1AB338D516A1  apps/integration-api/src/reconciler/reconciliation-scheduler.ts
+B5CD94C683BBF1EF792C4CEB9DE7B60CD5C4A9D16F6E931A79D9B1CAA6F6DA7F  apps/integration-api/src/reconciler/stuck-intent-reconciler.ts
+633054EEE87A0384E552AFF2F9B58C42447A89636F8B1613793FB51258AD972F  apps/integration-api/src/reconciler/stuck-receipt-reconciler.ts
+
+# ── integration-store: core modules ────────────────────────────────────────────
+
+354E9A963C1C83E4DB9BBCE7FDDE8771EC7823FEBB07EC9A7A4FAA51E578E0D8  packages/integration-store/src/worker/retry.ts
+E6131C05CC6A0E2DF2EC9E87780CDE6383AB7EDAB6B1E8CC9E6B4D9E89ACA1A7  packages/integration-store/src/worker/lease.ts
+D5301064168CB96AB71C3E61FFBEDC8F9A70A1B5F57B114772E9F4F88CFA5D3B  packages/integration-store/src/repos/event-receipt.ts
+8EE76A4DAE347E38FDFAE2901DC9F3F236E9F7916C60C679F3B1125B5DE3699F  packages/integration-store/src/repos/reconciliation.ts
+
+# ── Prisma schema & migrations ─────────────────────────────────────────────────
+
+E1FCAB173E3FD3F66A88CBEF7088A23F4B7064B47E1D3A78602A1D085464EADE  packages/integration-store/prisma/schema.prisma
+06AF0C0E050EC7B514A502DC93BB8C578760FA76C7B058E4CEF75B07BB6AA1D4  packages/integration-store/prisma/migrations/0004_recovery_action/migration.sql
+820720275C47AEEB63404BF5DA8CCAEE4968755D4E229755B3252C3719C71924  packages/integration-store/prisma/migrations/0005_reconciliation_entry/migration.sql
+
+# ── Test coverage ───────────────────────────────────────────────────────────────
+
+259ADA1B28188D49FCEA267394A415F6F8BD2A67AAEF818802F2F330CC1272A9  apps/integration-api/tests/dlq.test.mjs
+8FE0F0AD95FE718D6BAD82E4F9B05EF045CC462D95964F4A7D39A226D42DEDC1  apps/integration-api/tests/outbox.test.mjs
+F1B28019DEE3A05085B9EEA6576611A02ECC01BF9C66BFF6F09360074656136B  apps/integration-api/tests/outbox-reconcile.test.mjs
+50136B46972DC0AA1D2FD22A5CECFF6169DC9D180EBA6961A45CF975F0ED6E18  apps/integration-api/tests/reconciler.test.mjs
+AC90F5812B5E675AE22CE8A60ADA07F6D344EF19BD57ED4FEED70925337951F2  apps/integration-api/tests/retry.test.mjs
+8C20777294A8D40A91147372B28322B31162FB1CB30DBC4F014C730E91E21DD2  apps/integration-api/tests/pg-reconciler-harness.mjs
+# [BLOCKER 2 FIX] PG harness for outbox-reconcile (AC4) tests
+EA4235F9D4C8046E7588DEAA9FF3500147B1CADBEF726176C26B8512BDB87C4E  apps/integration-api/tests/pg-reconcile-harness.mjs
+
+# ── Test totals ───────────────────────────────────────────────────────────────
+# retry.test.mjs           : 42 tests (AC1)
+# dlq.test.mjs             : 12 tests (AC2)
+# outbox.test.mjs          : 12 tests (AC3) — 12/12 PASS
+# outbox-reconcile.test.mjs: 15 tests (AC4)
+# reconciler.test.mjs      : 20 tests (AC5)
+# Total CORE/1.8            : 101 tests
+# Full integration-api      : 338 tests

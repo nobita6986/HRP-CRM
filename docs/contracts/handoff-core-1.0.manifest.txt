@@ -1,0 +1,52 @@
+SHA-256 (CORE/1.0 scaffold manifest)
+HEAD: 414c54bfa2e227ec1a25694310e48908e0d67abe (Gate 0 freeze)
+Date: 2026-09-14
+T1 self-check: 42/42 CORE/1.0 fixtures PASS (13 config + 9 api + 9 worker + 11 panel);
+contracts package 398/398 fixtures PASS (Gate 0 freeze giữ nguyên).
+
+Tổng file bundle CORE/1.0: 32 file.
+
+8b64cb9d88763ef164b463f0ebb5cd5d86d5ea0234b45fe4ffeb96348a76d6e0  packages/config/package.json
+b35c9741df6809bd660b0c9b7c7785d2fe95843a85b7f3bc78b703553d2409e4  packages/config/package-lock.json
+f98abe4ffede82c1e924fd4b4f3b1f8a18690323ddb525d57fcd0505f6d154d1  packages/config/tsconfig.json
+96fb271d5efdd9658c4673bf0c5fa2ecaa0a5b85448bd929e508572a4544074b  packages/config/README.md
+acc1ec21f395feea38eb262b569874657e8275e28705b99e150554d47983ea19  packages/config/src/index.ts
+08ddf5451d738477dc1adbf76a0abaedc1a9badd8a4278ca15152518c813df2d  packages/config/src/types.ts
+b3c82de1ca7fa5201376c35ea9c60daf492ed5e8fe9b20006968031a4f9b0cec  packages/config/src/loader.ts
+82b8f73631b355b48461a5a460ffd0eb7cdb782cd42b733b3b8940205a7569eb  packages/config/src/mock.ts
+144ef9746e6d7607954a3030175029c27c43197384b15e2f9aa81b6383c3de7a  packages/config/tests/loader.test.mjs
+783729b009f37c6330713761e915b75d7370988b9ab72b647e97a232a86df66d  packages/config/examples/env.synthetic.example.ts
+ae94a99481b77ecdfde0aa2c51be623d2a94c3cd5428ace5966e91e71830d3ce  apps/integration-api/package.json
+b363c0ab775a3b70ba76e9bcf9bde4912e583103577e716f5ca01b8856b583e9  apps/integration-api/package-lock.json
+f558f7d196439e1b2ee2714b09d2c0b568d4917c8a40678e39b239a24724743a  apps/integration-api/tsconfig.json
+e3fa362cc615b397601daffeba8b1e1d6cfbf4a3854b063a7eab66aa80687ab9  apps/integration-api/README.md
+7a4f29555fc837576718f046b1e0513837331a3b65052aba0607e816cd9187f3  apps/integration-api/.env.synthetic.example
+0f0a194e07aee5246f01b1f0ef857bd0138e595f0fc17d8dfa9982279f306f81  apps/integration-api/src/server.ts
+3cceb9a2d32cc4a46cd6414d696c52b620a63c34fc2e09bf17f2de0b69d7ae08  apps/integration-api/tests/server.test.mjs
+4732566ca4cfb9b9469245375d500fb9179029835918466f5c72d8a9fdd05bd3  apps/integration-worker/package.json
+f22fa442d8acb3de355dd0c19e7a1d86f6d5825c1b935fb22a2ccca2f284a49e  apps/integration-worker/package-lock.json
+f558f7d196439e1b2ee2714b09d2c0b568d4917c8a40678e39b239a24724743a  apps/integration-worker/tsconfig.json
+1c2a947d6f5fae495c18a1e859cfb85c81b6b477caa93706c50ea7cba91b5746  apps/integration-worker/README.md
+ea83937407364a0c9871c3bca5eb899372921bfcf839bb7d8ba0a111af2c060f  apps/integration-worker/.env.synthetic.example
+eb1cd2691b26ee89f824c1ba4a2cc439115c96f94f9fd306e07c478be016af53  apps/integration-worker/src/server.ts
+9fa23c9afa09450601039df3c19a3f723dfc346c11532f61deddfe21ad4bbb1a  apps/integration-worker/tests/server.test.mjs
+0ee6a0733561147099bfd3e5cd251a31414258492f6909616734e7de0f171282  apps/context-panel/package.json
+3e7c06b6f126cdd4cd552b4245be171568e283823c67be489fcbe0c1d9c8c9a9  apps/context-panel/package-lock.json
+f558f7d196439e1b2ee2714b09d2c0b568d4917c8a40678e39b239a24724743a  apps/context-panel/tsconfig.json
+45e158d9a9ff4527350dfa326e692b7466ed4216db4ecb6ae78da6d6d4b886e5  apps/context-panel/README.md
+e7a83c4cc85a0474e4a4ac5e2c752924db5944b1c980cdc2b1fb2bb901046201  apps/context-panel/.env.synthetic.example
+5d8f0166c7456397bf425ef0271fd5b4d97bba320ce13398ba530bccbf05ad74  apps/context-panel/src/server.ts
+f85e9b854aaba9a1454bbcc9d1a0b6e087eead8f22a738bc419485e354f1a891  apps/context-panel/tests/server.test.mjs
+97967970050d3a80e068a851b6316a9e010ecdf71494c71010384f1418bbd016  docs/contracts/handoff-core-1.0.md
+
+Self-reference (KHÔNG tự ghi):
+- docs/contracts/handoff-core-1.0.manifest.txt (file này)
+- packages/config/dist/** (build output)
+- apps/*/dist/** (build output)
+- node_modules/ ở mọi package
+
+Audit status: scaffold theo §5.3 — Mock/read-only prototype.
+Boundary/security changes (FORBIDDEN_ENV_KEYS, assertNotProductionMock)
+được liệt kê trong handoff-core-1.0.md để Owner review.
+
+- Hết manifest -

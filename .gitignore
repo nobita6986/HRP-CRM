@@ -1,0 +1,36 @@
+node_modules/
+dist/
+.npm-cache/
+
+# Embedded PostgreSQL test data (created by integration tests)
+.tmp_pgdata_*
+
+# IDE / editor workspace settings (per-developer, machine-local)
+.vscode/
+
+# Scratch / temp manifest files
+scratch
+scripts/tmp-write.js
+
+# Test coverage and log output (if generated)
+coverage/
+*.log
+d.log
+m.log
+server.log
+t.log
+build.log
+test.log
+install.log
+unit.log
+gitstatus.log
+typecheck.log
+out.txt
+test-results.txt
+test_results.txt
+
+# Worker/test runner temp output (specific patterns)
+.pg-*.txt
+.pg7-out.txt
+.combined*.txt
+.pg-recovery-evidence.txt

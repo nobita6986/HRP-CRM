@@ -1,0 +1,204 @@
+SHA-256 (Gate 0/0.8 - full bundle manifest cho 0.0-0.8 + F1-F5 + F2-followup)
+HEAD: 414c54bfa2e227ec1a25694310e48908e0d67abe (chỉ chứa connector docs;
+source/tests/config/lockfile code untracked tại working tree)
+Date: 2026-09-14 (sau đợt F1–F5 + F2 follow-up recheck; Owner confirm PASS)
+T1 self-check: `npm test` 398/398 fixtures PASS (385 F1-F5 + 13 F2 follow-up);
+`npm run typecheck` PASS. Trạng thái hiện tại: **GATE 0 FREEZE**
+(Owner xác nhận theo snapshot Auditor PASS; CHECKPOINT ghi tại
+docs/contracts/checkpoint.gate-0-freeze.md).
+
+Tổng file bundle: 85 file thủ công (29 src + 25 tests + 3 config
++ 6 Importal + 21 contracts + 3 package + 1 review).
+
+============================================================
+§M.1 - Source TypeScript (29 file, packages/contracts/src/)
+Bao gồm 2 file mới đợt F1-F5: dnc.ts (F4), merge-review.ts (F1)
+(gateway.ts sửa cho F2 follow-up)
+============================================================
+e415740f630280ba3ce5c026d1869c89fbd62d27e4b03b372d5c93ed3892cc0f  packages/contracts/src/commands/ai-proposals.ts
+7c9cbde564a0a406ab4c6606a9b71188213f6be46ae46a5ccefd2b88b6922bae  packages/contracts/src/commands/ai-provider-config.ts
+c0f11873c3410cad4b0399999d98410d2398aafffc50c65af2747df4beff193c  packages/contracts/src/commands/analytics.ts
+51f7a099ed5b213f94d132ba26950a2e720eb7cfad0c4b2064d6dd76d1975cc4  packages/contracts/src/commands/availability.ts
+6e259966765f5733a91954917692d8413b1f0cf7a1eca4d37ae65de40038fe82  packages/contracts/src/commands/dnc.ts
+a94ebfa53d29f3036c2d3965817cf86fa8b638e66a2db3f24dd46eec192e188a  packages/contracts/src/commands/events.ts
+5bdc44ce399c2e60aa429edbb01e33deaa92c324b61d68aeddf24ba52206b95d  packages/contracts/src/commands/evidence.ts
+e895110112774357c41bd50984c012e25ce508bd9029195e31a01aa101ca28fe  packages/contracts/src/commands/gateway.ts
+306f3e21bb43c310fbb7bfecab4eb0557df800d2304967234a0b957a29897594  packages/contracts/src/commands/identity.ts
+36e4b06413a813158324897b0088fd610a4d7e782cf9d70d2b39032248804a60  packages/contracts/src/commands/intake.ts
+ddce04c2f01aa79707939a2dfbd65b29d5ee41f89438225020e266411ff7452d  packages/contracts/src/commands/interactions.ts
+6448942e2f36fa01d92b6bccc700f2c942f3527f32909f12890e585b799eb60e  packages/contracts/src/commands/kpi.ts
+1365ead406b60c670a4f03708318f18405ce1fbe855cc5580cc79b41429055db  packages/contracts/src/commands/mappings.ts
+f6063656d0fcf43b7fb708dd5d420136c6b52084dce1171fb5c290de3784fd48  packages/contracts/src/commands/merge-review.ts
+78be65edfbbc40be4bd336e5e76dedd9dc92ddd1a9003dc7ca9daef617e29407  packages/contracts/src/commands/next-action.ts
+1b12bd132e92668f61862966749a6f528a23722139e197e927311047d94c904a  packages/contracts/src/commands/outbox.ts
+502a7fd8c17b3b8adf3eda668b7510602212553c50c26099c0e49ae4a95ec974  packages/contracts/src/commands/placement-case.ts
+79db5c805e90277ff1278f36c06e01eee87d703f5106b2c3b1eff4722e0134e0  packages/contracts/src/commands/ports.ts
+2754517d0b55f8e1b6ec52078c9408577e24a223144a48c5f6128c7ceca8788f  packages/contracts/src/commands/profile.ts
+f26c66539a6827cb4c58f756369a485b13614a83abc95da17fd2a4a25b60e843  packages/contracts/src/commands/providers.ts
+4bfa1fe623244698442470d4498521ec154b6c830e937e234cd72c58113b2c0e  packages/contracts/src/commands/queries.ts
+92d05d9106625326222bbc7ce9d2cc5c09375d8b642adea3fc74d24e38d8f326  packages/contracts/src/commands/routing.ts
+e04f8dfaf084c53ef1d108912885b5c309db2c338fd8655d7de6120d74a2d041  packages/contracts/src/commands/scheduling.ts
+1423dcf0d329c4eb36832145ba2ea5265ed32725fa0b5d8394135642a20156e4  packages/contracts/src/commands/suppression.ts
+ff6ee50aada938843bfa4546ef0d268ef8eac702bfa4690d18f396520f1d1581  packages/contracts/src/enums.ts
+f68ea4866c4f33786b03298ca531b454ff97437200d31457d5ac89d1f32af4d2  packages/contracts/src/envelopes.ts
+54df177848033b509789607377dd92f7319a08988b29558e8100f6c5e7e867e0  packages/contracts/src/errors.ts
+be9e99f29e59a0191bf404a0cc0a8ef39bdf4ef72c8f20099d7f0c73ade2df3e  packages/contracts/src/index.ts
+359a37758e18069ed69e5e1015b8ea00ed18c6b2f598b6125afce01962ef56ac  packages/contracts/src/primitives.ts
+
+============================================================
+§M.2 - Tests (25 file, packages/contracts/tests/)
+Bao gồm 3 file mới đợt F1-F5 + F2 follow-up: fixtures-fix-f1-f5.test.mjs,
+fixtures-fix-f2-gateway-hrpui.test.mjs, test-helpers.mjs (F2)
+============================================================
+198a63f40f694c3893ec498b9293787f22985de391be3981a3e688f435f7b9c7  packages/contracts/tests/_synthetic-coverage.md
+8b5e583f49fcac24c3c119a81856af4bb991ae18a443d33e45520406d18e06cd  packages/contracts/tests/_synthetic-pending.md
+c68b040a2f3b919d19a6902134cc8fe42473ae1eaafc8bf48e2cad14ae181b0c  packages/contracts/tests/availability.test.mjs
+ede9dfeccd3a9f148047d872c48d36f15e5b12e3e5609356f5660a3e70572f03  packages/contracts/tests/contracts.synthetic.mjs
+6ac45cf338fe42ee4bc383c9ba46337a28e539ed2ae45a0456f28e7d89cb4fed  packages/contracts/tests/enums-extra.test.mjs
+254bf651a4962989fc08ebe3a057d7703cd8a17d2789bb9f9eb7cdaadd9de87d  packages/contracts/tests/enums.legacy.mjs
+24c6ac5bdcee4529e36de3a9a26a5bf00f6fe0485c8652888b091f2be4755d91  packages/contracts/tests/enums.test.mjs
+8e7424ba6e896168aef1cda33e719ce3d5ec384d943158fb4cfe31fecaa9e934  packages/contracts/tests/envelopes.legacy.mjs
+3d406a11189c02c226cf6c8a6dd423c6622af3f0c03b4fcc53007d8de52e26a5  packages/contracts/tests/envelopes.test.mjs
+6e9c7ccb0f2df6fd31e2dc05dbae15d8a4f85ccd185ac4fc10a3e3afc8cdeff4  packages/contracts/tests/errors.legacy.mjs
+d5f404e14a748559607557ac2566f7f0141130d0f5a8ce9f1d3c2348e3e5503f  packages/contracts/tests/errors.test.mjs
+0e1a2f2e5a48d72e9c439239f44fae0dcad43dd70f301f73121e27a69adb6cac  packages/contracts/tests/fixtures-coverage-0.7.test.mjs
+c4059ceb35d82c59fa60a186c5090129779dc6ae3a9c44f050c7e4eff8173603  packages/contracts/tests/fixtures-fix-f1-f5.test.mjs
+1c76288fd1378a71ad835cdf5748c96825aed83e9033a4115ee66730790c4f78  packages/contracts/tests/fixtures-fix-f2-gateway-hrpui.test.mjs
+c2f42ca150a16b5860930d5e0faf7090f787b50c1fb7667c2d74bd6027025e1c  packages/contracts/tests/gateway-providers-ports.test.mjs
+f00b1a3744fcd20bb2d4f885178938561859c3c40a0b6e62945941eaa74dc31e  packages/contracts/tests/identity.test.mjs
+c1642f3c9bf4e070317023d7539ef6bf57a6fd9e7b3f6b32e102305267a01669  packages/contracts/tests/next-action.test.mjs
+07d781707c717416e6587c3c78c843116db1274b2523ed8d3ad24bc0f6a3094d  packages/contracts/tests/outbox.test.mjs
+291e5a11409cb3717e22b649d039de00644462195a60f84a1c83837942739fde  packages/contracts/tests/placement-case-interactions.test.mjs
+11cbbe157f01992e3dc6a8c77fc320c8555e35cf171a3175197e36f8481573ba  packages/contracts/tests/profile-intake.test.mjs
+9d895db14e58cd1ffc1b362c123628d0d31089eac57501985cc34c2eb3f34ec4  packages/contracts/tests/queries-events-mappings.test.mjs
+2eccf4260d69dda0e71fa7c33bdf874cecb47c21c48297a1b8a83cae60bab2d3  packages/contracts/tests/routing-analytics-kpi-ai.test.mjs
+44d7f4e6a73984d8493ad40f1f4a8a869dd15ff9c1de055e85793835aaee7351  packages/contracts/tests/scheduling.test.mjs
+7d042f67ae371ac1de5c46f2ea72c17cf9a59ef849b4cf633beb57a9d997d361  packages/contracts/tests/suppression.test.mjs
+eef76e14ef09550734ffe187cb7b936790e94149edfaba445f78fa3229d35721  packages/contracts/tests/test-helpers.mjs
+
+============================================================
+§M.3 - Config + lockfile (3 file, packages/contracts/)
+============================================================
+31ebfaa71dd86030de374b4df62d852a30a32517d7d07a40c0f0629c12604fc0  packages/contracts/package-lock.json
+3e202ca38ec4ef1f4f0fed78f4b571ebb54fd86e6997eeaefe67956b581af70e  packages/contracts/package.json
+5ac522bd9ed4375a22933be65a9e3b00a4c546f34d7ee8a276cc40f8c00058d2  packages/contracts/tsconfig.json
+
+============================================================
+§M.4 - Docs Importal/Owner (6 file, docs/Importal/ - tracked tại HEAD)
+============================================================
+49b57a23ceacbd8897bbbee400d3eb786c81083bd0151d3ab8685c408246a1ad  docs/Importal/Execution-Guide.HRP-Engagement.md
+0dfb02809f07f69a9de897eb349983393e5e7a138dfb7a6bbab902c94379c73e  docs/Importal/Implementation-Backlog.Gate0-V7.9a.md
+be7f9b3f789c62a69460d79d079f5353cffcf42153706b809ccd41ae02c4a673  docs/Importal/Implementation-Backlog.HRP-Owned-V7.9b-f.md
+77e5a6fc33e90bd828bde3d31c8927f88d22f2b486d6ecddb73f693e4f4314dd  docs/Importal/Implementation-Backlog.V7.10-AI-BoD.md
+b82ef7a5a36bf7ac9cf19f1e1f57bbb71cfa19f8c3ce81f69aa1f7a9754fc1cc  docs/Importal/Master-Plan.V2.6.md
+d9bd421b6d3c2af7672be07852ba02387664d598351690a32eb96da53ce1521e  docs/Importal/hrp-connector.md
+
+============================================================
+§M.5 - Docs Contracts (21 file, docs/contracts/ - untracked tại working tree)
+Bao gồm 1 file mới đợt 0.8: handoff-g0-0.8.md
+(decision-register.md + inventory.md sửa cho F1-F5 + F2 follow-up)
+============================================================
+1dfc993a1d79b4a0d5aaa46b43260076b686a49ca76f3b3502bd99ecf7e69f3a  docs/contracts/authorization-policy-matrix.md
+7bf97d66d20f6db271d4bd2849a44a67fd92e05a103d04174d62e2da89399c69  docs/contracts/checkpoint.g0-0.0-0.2.md
+1ddedf114fb5c6a1abd2e3c6abed27804acbbc6d139e361264bbd9830ae1a14f  docs/contracts/decision-register.md
+823075ed8ea611634b3cd120b64031b6003f614133f6692310d16e185ef54658  docs/contracts/g0-0.0-0.2-handoff.md
+b7cf515482a376378c1df57a68a2596f4d5dd0a422e33b88d363ae843dcf7f5f  docs/contracts/handoff-g0-0.3a-0.3b.md
+d8c7e127d0130d266a6398cd5642b110b0f8fded4d1f50cfa17fa3e4dbfca0de  docs/contracts/handoff-g0-0.3c-0.3d.manifest.txt
+f424b3f5bb734ec3738a918a2f6bcba285cfdc77f26195e19d8f3f111263097e  docs/contracts/handoff-g0-0.3c-0.3d.md
+24932c34c11f3f6734a2df1a260012e7426c93e53391a6dd79c3aeabe7b92521  docs/contracts/handoff-g0-0.3e-0.3f.manifest.txt
+9834f90d6d7f7b742ba0000ea65645a072d0ac6c5a54feca5f75934104990fd0  docs/contracts/handoff-g0-0.3e-0.3f.md
+880b6717ceb8bb501a441fc8f6a7f0571b7c0f95dbfdf98176795d07a975e0e1  docs/contracts/handoff-g0-0.3g-0.3h.manifest.txt
+8216f8c79a292f9b595e72cbb8e481959b5c6c0d94e509958b5c8ee98505fe14  docs/contracts/handoff-g0-0.3g-0.3h.md
+cd93f56c0ad878fa9f1b4fd0f6306a7ccd8ff14ba8c285773e9605d488b6979f  docs/contracts/handoff-g0-0.4.manifest.txt
+400cf3d84a8e3f1cf9106f1cb7858d94a7e00789a2f11a4d9d142eb207718a1f  docs/contracts/handoff-g0-0.4.md
+76a2447fee11dd916d125426b39d8b84e83fa00f1e54eaffe9a7f4a10e8501c1  docs/contracts/handoff-g0-0.5.manifest.txt
+3a488c47e4558b93b3d4f11796190e8c1e9458a1ba44ec10c17a084f8a242cf7  docs/contracts/handoff-g0-0.5.md
+7f7851030be68edd1c3e6832958c2dc0a00eb97ae4a2790cefcde761a34551d6  docs/contracts/handoff-g0-0.6.manifest.txt
+c5ef8c019a3a0c1cd83fafc181e80330466cc3ac7d08842fa68439fc78d69311  docs/contracts/handoff-g0-0.6.md
+e5fc7d208e9a08ae8e3878eb53e4dd237dc21229c0aafccb7675b341ac52313d  docs/contracts/handoff-g0-0.7.manifest.txt
+0e7081a0384a769831cdc5743761e5e5aaed1e055255d0f0d625a827f380f174  docs/contracts/handoff-g0-0.7.md
+74199103febe6e0f1b702cab700fc50b561919f3f1e31762965f0fd5530df6ff  docs/contracts/handoff-g0-0.8.md
+4efc23749dfa29fcf51442098d2294797698d20a9f98868adf98909affe1abb5  docs/contracts/inventory.md
+
+============================================================
+§M.6 - Docs package + reviews (3 file)
+Bao gồm 1 file mới đợt 0.8: gate-0-checklist.md
+(sửa cho F1-F5 + F2 follow-up §2.3 + §9.1)
+============================================================
+7a61c2465b19fe1d325ec1c59486ab1f23f1236c876a9a47f4c9751cdf1e0e89  docs/reviews/gate-0-checklist.md
+aedeae9bdd93e88cbe51a3d46e9b1f1952131ba77058a0ec68f1112012f909ed  packages/contracts/CHANGELOG.md
+b08a271ac1085344e82cc2d8060f0c2be2aeb556d30d2720eb33a35e1ae3d5ac  packages/contracts/README.md
+
+============================================================
+§M.7 - Đợt F1–F5 + F2 follow-up: file mới + file sửa
+============================================================
+File mới (5):
+  6e259966765f5733a91954917692d8413b1f0cf7a1eca4d37ae65de40038fe82  packages/contracts/src/commands/dnc.ts
+  f6063656d0fcf43b7fb708dd5d420136c6b52084dce1171fb5c290de3784fd48  packages/contracts/src/commands/merge-review.ts
+  eef76e14ef09550734ffe187cb7b936790e94149edfaba445f78fa3229d35721  packages/contracts/tests/test-helpers.mjs
+  c4059ceb35d82c59fa60a186c5090129779dc6ae3a9c44f050c7e4eff8173603  packages/contracts/tests/fixtures-fix-f1-f5.test.mjs
+  1c76288fd1378a71ad835cdf5748c96825aed83e9033a4115ee66730790c4f78  packages/contracts/tests/fixtures-fix-f2-gateway-hrpui.test.mjs
+
+File sửa (13 src - F1-F5 code-level remediation + F2 follow-up):
+  306f3e21bb43c310fbb7bfecab4eb0557df800d2304967234a0b957a29897594  packages/contracts/src/commands/identity.ts
+  36e4b06413a813158324897b0088fd610a4d7e782cf9d70d2b39032248804a60  packages/contracts/src/commands/intake.ts
+  ddce04c2f01aa79707939a2dfbd65b29d5ee41f89438225020e266411ff7452d  packages/contracts/src/commands/interactions.ts
+  c0f11873c3410cad4b0399999d98410d2398aafffc50c65af2747df4beff193c  packages/contracts/src/commands/analytics.ts
+  6448942e2f36fa01d92b6bccc700f2c942f3527f32909f12890e585b799eb60e  packages/contracts/src/commands/kpi.ts
+  e04f8dfaf084c53ef1d108912885b5c309db2c338fd8655d7de6120d74a2d041  packages/contracts/src/commands/scheduling.ts
+  1423dcf0d329c4eb36832145ba2ea5265ed32725fa0b5d8394135642a20156e4  packages/contracts/src/commands/suppression.ts
+  e415740f630280ba3ce5c026d1869c89fbd62d27e4b03b372d5c93ed3892cc0f  packages/contracts/src/commands/ai-proposals.ts
+  502a7fd8c17b3b8adf3eda668b7510602212553c50c26099c0e49ae4a95ec974  packages/contracts/src/commands/placement-case.ts
+  e895110112774357c41bd50984c012e25ce508bd9029195e31a01aa101ca28fe  packages/contracts/src/commands/gateway.ts
+  be9e99f29e59a0191bf404a0cc0a8ef39bdf4ef72c8f20099d7f0c73ade2df3e  packages/contracts/src/index.ts
+  3e202ca38ec4ef1f4f0fed78f4b571ebb54fd86e6997eeaefe67956b581af70e  packages/contracts/package.json
+  aedeae9bdd93e88cbe51a3d46e9b1f1952131ba77058a0ec68f1112012f909ed  packages/contracts/CHANGELOG.md
+
+Tests sửa (8 - fixture migration F2 + verification F1-F5):
+  c68b040a2f3b919d19a6902134cc8fe42473ae1eaafc8bf48e2cad14ae181b0c  packages/contracts/tests/availability.test.mjs
+  7d042f67ae371ac1de5c46f2ea72c17cf9a59ef849b4cf633beb57a9d997d361  packages/contracts/tests/suppression.test.mjs
+  291e5a11409cb3717e22b649d039de00644462195a60f84a1c83837942739fde  packages/contracts/tests/placement-case-interactions.test.mjs
+  11cbbe157f01992e3dc6a8c77fc320c8555e35cf171a3175197e36f8481573ba  packages/contracts/tests/profile-intake.test.mjs
+  c1642f3c9bf4e070317023d7539ef6bf57a6fd9e7b3f6b32e102305267a01669  packages/contracts/tests/next-action.test.mjs
+  44d7f4e6a73984d8493ad40f1f4a8a869dd15ff9c1de055e85793835aaee7351  packages/contracts/tests/scheduling.test.mjs
+  0e1a2f2e5a48d72e9c439239f44fae0dcad43dd70f301f73121e27a69adb6cac  packages/contracts/tests/fixtures-coverage-0.7.test.mjs
+  c2f42ca150a16b5860930d5e0faf7090f787b50c1fb7667c2d74bd6027025e1c  packages/contracts/tests/gateway-providers-ports.test.mjs
+
+Docs sửa (4 - matrix + decision + inventory + checklist):
+  1ddedf114fb5c6a1abd2e3c6abed27804acbbc6d139e361264bbd9830ae1a14f  docs/contracts/decision-register.md
+  4efc23749dfa29fcf51442098d2294797698d20a9f98868adf98909affe1abb5  docs/contracts/inventory.md
+  1dfc993a1d79b4a0d5aaa46b43260076b686a49ca76f3b3502bd99ecf7e69f3a  docs/contracts/authorization-policy-matrix.md
+  7a61c2465b19fe1d325ec1c59486ab1f23f1236c876a9a47f4c9751cdf1e0e89  docs/reviews/gate-0-checklist.md
+
+============================================================
+§M.8 - Self-reference (KHÔNG tự ghi hash để tránh cycle)
+============================================================
+- docs/contracts/handoff-g0-0.8.manifest.txt (file này) - KHÔNG tự ghi.
+- docs/reviews/gate-0-checklist.md - KHÔNG tự ghi hash của chính nó.
+- docs/contracts/handoff-g0-0.8.md - KHÔNG tự ghi hash của chính nó.
+
+Owner verify bundle bằng PowerShell `Get-FileHash <path> -Algorithm SHA256`
+hoặc shell `sha256sum` rồi đối chiếu với manifest này.
+
+============================================================
+§M.9 - Trạng thái bundle Gate 0
+============================================================
+- HEAD 414c54b chỉ chứa `docs/Importal/*.md` (connector docs);
+  source/tests/config/lockfile code untracked tại working tree.
+- Khi commit, working-tree blobs sẽ có cùng SHA-256 content (git blob
+  object dùng SHA-1 cho object id, không liên quan SHA-256).
+- Owner commit/tag KHÔNG tự thay sự xác nhận cuối; Gate 0 freeze cần
+  Owner sign-off rõ ràng (yêu cầu independent audit hoặc sign-off điều
+  kiện sau khi Auditor recheck F1–F5 + F2 follow-up).
+- 7 critical Phase 9 decisions cần Owner chốt trước FREEZE (xem
+  gate-0-checklist.md §3.0): G0-06, G0-07, G0-08, Q-19, Q-21, Q-22, Q-23.
+- F1–F5 + F2 follow-up đã áp dụng đầy đủ (Q-38..Q-43);
+  F2 follow-up KHÔNG mở Q mới (vẫn nằm trong Q-39 mở rộng).
+- Audit status: **GATE 0 FREEZE** (Owner xác nhận theo snapshot Auditor PASS).
+  F2 follow-up đã áp dụng; CHECKPOINT ghi tại
+  `docs/contracts/checkpoint.gate-0-freeze.md`.
+- Checkpoint này KHÔNG cấp quyền push/deploy/provider thật; chỉ
+  xác nhận bundle contracts đã freeze cho V7.9a implementation
+  phụ thuộc.
+
+- Hết manifest -

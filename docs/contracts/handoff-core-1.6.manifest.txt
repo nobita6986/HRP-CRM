@@ -1,0 +1,18 @@
+# CORE/1.6 manifest - Intake Orchestration and Checkpoints
+# SHA-256 hashes for files changed/created in CORE/1.6.
+# Regenerated: 2026-09-15 (B4 recheck fix).
+# Delta: B4 recheck - payload.context strict, actor passed via gateway call context.
+# B1-B3, N1 not touched; status unchanged.
+
+30C884419BC3AF6239676ECA6BDFB44B838D7914B9B130116781DC6B6AE4F724  apps/integration-api/src/orchestrator/intake-orchestrator.ts
+5B0DEDDC4E4C14EC7A68EA07833ABF4DF0E32F8A33D97677600510FE0C1A5850  apps/integration-api/src/orchestrator/steps.ts
+612B0FD72210904306639EB2624C1AB7748171452B0CBEC75C819E0C88879386  apps/integration-api/src/orchestrator/dnc-handler.ts
+E403E73C67EF89DB4D17ACDDF20EB486D932127D76AB79755047DF2EDD3F565D  apps/integration-api/src/orchestrator/index.ts
+187A418B256BA6007913DF6E415F9B13AF2CC76C8A3B9F586B0F8A06592E733C  apps/integration-api/src/orchestrator/digest.ts
+054BEB4C75022A177071131FD23D158B7A9501351A8E642CEDABEC644CC9B138  apps/integration-api/tests/orchestrator.test.mjs
+59389F1A0C7507F5118825CFA1673C8E9C1A27A9AE7A8E5F5408F0802AFAFA8D  apps/integration-api/tests/orchestrator.pg-e2e.test.mjs
+D07113DA7BF7A7AA2F5146EB055E3E1F59D5C1F94C766A314153429DB126D2E6  apps/integration-api/tests/pg-orchestrator-harness.mjs
+F0943351ECD8DDA909E8224E0CE89655528E976FF8F7520B06D86FD99700511A  packages/integration-store/prisma/migrations/0003_intake_checkpoint/migration.sql
+2ABBBBE6746E3B9834F4FA4834153997B519B4AB73B0693001637DC12E84FA55  packages/integration-store/prisma/migrations/0003_intake_checkpoint/rollback.sql
+BF1E6A5823F2E7D9888777CF2DE75BD3CA957AD4FABC16BACC41297B8B7394AB  packages/integration-store/src/repos/intake-checkpoint.ts
+CDF65FEFC992767B4A867E2745C42A1282802B50D9DBDD45016A12E5E086D99C  docs/contracts/handoff-core-1.6.md

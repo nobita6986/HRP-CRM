@@ -1,0 +1,67 @@
+# CORE/1.9 — Handoff Manifest
+# Date: 2026-09-18T07:03:02.643Z
+# Generator: scripts/generate-manifest.mjs (SHA-256)
+# Total files: 39
+#
+# Format: FILE|<repo-relative-path>|<sha256-hex>
+#
+
+FILE|apps/context-panel/src/server.ts|ca2341245c2ad68e551ad82b16853f9bc664309aba4067baed064bff99e02780
+FILE|apps/context-panel/src/orchestrator-wire.ts|6c86da5fe941e82efd20d7feff5f601f0201a484d7733bf1d460cb1a95b09441
+FILE|apps/context-panel/src/gateway-call-log.ts|45823b07f552c620da2db8943be510835882767593b3db911cf7c25c8e0915dd
+FILE|apps/context-panel/src/review/wiring.ts|903c17a14b9c2ceea509292451dc98b33dcd07ec04b74463901d1d2b5799281f
+FILE|apps/context-panel/src/routing/types.ts|734c60a1ed384cd62426bc65e78f09844a1a1a1665743c34ab466974d8330ecb
+FILE|apps/context-panel/src/routing/simulator.ts|56803f3447e322e308a3f646addc8a29f731f004bcadfdf24cd930730918eb3c
+FILE|apps/context-panel/src/routing/config-store.ts|0abd5feb27a8b1fd76bb66f68b5c106d6386b6f3dbb9eeeddbdecc8e0349e1d2
+FILE|apps/context-panel/src/routing/service.ts|7d1670eaecf10df6670a19316198a2d67a95d377f7cfd693028b9b521e95f708
+FILE|apps/context-panel/src/ui/mock-api.ts|6b7b937ebebccd107e5cec61fbf2fbb3a8fbdae96c40d547d8fb81b2049f5258
+FILE|apps/context-panel/src/ui/types.ts|10f3b508e4e6b5b5c1814b974f2f5a0ff78960d5f3e6ece84314d981ea83fb50
+FILE|apps/context-panel/src/ui/app.tsx|a6db23243471831bccac6112be99938ae8272ae6a09f1d9feb0574a393aebc8a
+FILE|apps/context-panel/src/ui/components/index.ts|812d92a0e377bbf97a4becd061a26b8f98dd711c626fd87b537fd7664fcbabe1
+FILE|apps/context-panel/src/ui/components/talent-panel.tsx|3d77e26c99a3548bca4c01b6f64cc27e90b2c1d1d4d20f37877c90bbc6425e7e
+FILE|apps/context-panel/src/ui/components/client-panel.tsx|6557f09e6ceef72416d227233a5819594be731818e08d0642f35ebd98095f29e
+FILE|apps/context-panel/src/ui/components/intake-review.tsx|d73a6b5f437243a13a7950739011745693301f99a51142793b804213782f33e9
+FILE|apps/context-panel/src/ui/components/context-panel.tsx|dc3d55ff7fcb086432ed403b60f22ea780df284cb516b6e24e1687cf04547ce1
+FILE|apps/context-panel/src/ui/components/states.tsx|1e323d7470a63979bacc28a66ed99bf2b6bde6e6a4b28675ebef3d841a91cdd1
+FILE|apps/context-panel/src/ui/components/placement-case.tsx|9baf17b79c2a74c4552c107f4cc677d32c089f7c0dd4c85e6bbccb6e4ca79cb7
+FILE|apps/context-panel/src/ui/components/availability.tsx|44fbfe652704079ce4d6d6c33f42036d7cf66d7ca557dcbf422ea54673092203
+FILE|apps/context-panel/src/ui/components/close-reason-select.tsx|ad082ac586f98ec39f1ecf2bad851f9d2ae635eb3d702ed16fb56ee9e57a773e
+FILE|apps/context-panel/src/ui/components/current-relationship.tsx|c41e49c3c818a3f53e7e3cdaf065a8b9a7d251716fefee96f77c81e22aa08344
+FILE|apps/context-panel/src/ui/components/badge.tsx|9b9510e1d66513b5867ca1ecf8b2ebe74fbf13794ffc05c54d5df36729886a92
+FILE|apps/context-panel/src/ui/components/routing-panel.tsx|520436bb5ac72d77d336f5cf8201c60ea2870fb14d03e325eb939c624a6825ef
+FILE|apps/context-panel/scripts/build-ui.mjs|065b09539d899c24fb394117a03a1fd5e19c3bbf736fc238e8a88c0e3ef2635a
+FILE|apps/context-panel/scripts/generate-manifest.mjs|00fa11d6d5ce4031f1698282f016aa5447eb5458e9a8e1d44e00ad6061c577ab
+FILE|apps/context-panel/package.json|5625514a0148649a36b4f141e5ee8d7fdcacab334c5edc4bd823ffc87589ee79
+FILE|apps/context-panel/tests/server.test.mjs|2d281bf764af5ef5c90a335c69d2096b883daac65d1d82f13bd8132b02d7dec2
+FILE|apps/context-panel/tests/panel-ui.test.mjs|fbd7a64fddf9b9682154ef4f065b8147a606a70deb3b03698b2a26e6573bdf79
+FILE|apps/context-panel/tests/browser-evidence.mjs|51c313b15f5313dd24da9763314868629c3961de0a324bbb1c0eb933187514dd
+FILE|apps/context-panel/tests/security-evidence.mjs|783ba9ae1c6e9984c29f1b0df29730e94285f3bc249b17c62befc6a039b8f899
+FILE|apps/context-panel/tests/manifest-readonly.test.mjs|530f719ec1977e10d55be67fc6549a65418b20b116c44bdfaaef5b230f0575cc
+FILE|apps/context-panel/tests/routing-simulator.test.mjs|1f5338d77f859a921909ad1421594c7b14a348a85b62e6ffc05e94c06a5b676b
+FILE|apps/context-panel/tests/routing-api.test.mjs|e22dda71a35802b1edce88ed8c8191b3d85483fb3bf319e8ca748c34a04a4683
+FILE|apps/context-panel/tests/evidence/summary.json|563a5bfc34563740f0001c6e015d4a693216316e59730acaa792f42f43714605
+FILE|apps/context-panel/tests/evidence/summary.r2.json|eb887248469519c434f11ef2fbc2ac64e157183b0d47a13059056fe57f20c010
+FILE|apps/context-panel/tests/evidence/summary.r3.json|5d96ef739135ce0dee2ebf5958773034c629d502c9afbffa30104232bab9a578
+FILE|docs/contracts/handoff-core-1.9.md|59f9f9f4dc135d131dbf5f2c8f8060c4881e6d47317f8fc6e0bbd293800b82f3
+FILE|docs/contracts/handoff-core-1.9.status.md|bbdf958e189e040e3abd9896b94f03994287cdb566e9791019cb828ca5cc1114
+FILE|docs/reviews/audit-core-1.9.md|d739858bb66d6efd566f008fd6f56db9d57b5e36067a4d3b5e149208caf21803
+
+# Verification (READ-ONLY):
+#   node scripts/generate-manifest.mjs --verify
+#   node scripts/generate-manifest.mjs --check
+#
+# Removed (R4 re-recheck — verbatim copies/source-link superseded):
+#   - apps/context-panel/src/orchestrator/index.ts
+#   - apps/context-panel/src/orchestrator/intake-orchestrator.ts
+#   - apps/context-panel/src/orchestrator/digest.ts
+#   - apps/context-panel/src/orchestrator/dnc-handler.ts
+#   - apps/context-panel/src/orchestrator/steps.ts
+#   - apps/context-panel/src/gateway/index.ts
+#   - apps/context-panel/src/gateway/mock-gateway.ts
+#   - apps/context-panel/src/gateway/ledger.ts
+#   - apps/context-panel/src/gateway/scenarios.ts
+#   - apps/context-panel/src/gateway/types.ts
+#   - apps/context-panel/src/store/intake-checkpoint-shim.ts
+#   - apps/context-panel/src/types/integration-api-shims.d.ts
+#   - apps/context-panel/src/.source-link.json
+#   - apps/context-panel/scripts/generate-source-link.mjs
