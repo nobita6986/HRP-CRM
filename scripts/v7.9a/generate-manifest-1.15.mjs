@@ -25,9 +25,56 @@ const ROOT = path.resolve(__dirname, '../..');
 const OUT_PATH = path.join(ROOT, 'docs/contracts/handoff-core-1.15.manifest.txt');
 
 const DELTA_FILES = [
-  // Runbook scripts (PowerShell + Bash + Node).
+  // ── V7.9a Build Fix Delta (CORE/1.15 re-open) ────────────────────────
+  //
+  // Fix: Clean-environment build from isolated checkout.
+  // Root cause: `runInTxn` had union type `(tx: PrismaTransactionClient | unknown)`
+  // which collapsed to `unknown` — no `any`/`ts-ignore`/`strict` disabled.
+  //
+  // Fix: Single `runInTxn(prisma, fn)` overload with `prisma: PrismaClient`
+  // and `fn: (tx: PrismaTransactionClient) => Promise<T>`. Prisma guarantees
+  // `tx` type at runtime. All 45 TS errors resolved.
+  //
+  // Also: integration-api needed .d.ts exports for subpaths
+  // (./gateway, ./orchestrator, ./review) consumed by context-panel.
+  // tsconfig.json now emits declarations; package.json exports types paths.
+  // This eliminates legacy "implicit any" / "err unknown" errors in
+  // context-panel orchestrator-wire.ts without disabling typecheck.
+  //
+  // Scope:
+  'packages/integration-store/src/client.ts',
+  'packages/integration-store/src/index.ts',
+  'packages/integration-store/src/repos/contact-link.ts',
+  'packages/integration-store/src/repos/conversation-link.ts',
+  'packages/integration-store/src/repos/event-receipt.ts',
+  'packages/integration-store/src/repos/intake-checkpoint.ts',
+  'packages/integration-store/src/repos/reconciliation.ts',
+  'packages/integration-store/src/worker/lease.ts',
+  'apps/integration-api/tsconfig.json',
+  'apps/integration-api/package.json',
+  '.gitignore',  // Added .codegraph/ to root .gitignore.
+
+  // ── Scripts fix (CORE/1.15 re-open) ───────────────────────────────────
+  //
+  // Fix: install.ps1/sh wrong dist path checks (dist/client/index.js → dist/index.js),
+  // missing npm ci, missing prisma generate, wrong build order.
+  // Now uses npm ci + prisma generate + correct dependency graph.
+  // Also fixed UTF-8 encoding for install.sh (was UTF-16LE).
   'scripts/v7.9a/install.ps1',
   'scripts/v7.9a/install.sh',
+
+  // ── Original CORE/1.15 Acceptance Delta ────────────────────────────────
+  //
+  // PG harness locale fix for Windows portability (--locale=C).
+  'apps/integration-api/tests/pg-receiver-harness.mjs',
+  'apps/integration-api/tests/pg-orchestrator-harness.mjs',
+  'apps/integration-api/tests/pg-reconcile-harness.mjs',
+  'apps/integration-api/tests/pg-reconciler-harness.mjs',
+  'apps/integration-api/tests/outbox.test.mjs',
+  'apps/integration-worker/tests/pg-worker-harness.mjs',
+  // Acceptance demo (A01-A15 scenarios).
+  'apps/integration-api/tests/acceptance-1.15-demo.mjs',
+  // Original runbook scripts.
   'scripts/v7.9a/start.ps1',
   'scripts/v7.9a/start.sh',
   'scripts/v7.9a/stop.ps1',
@@ -35,17 +82,21 @@ const DELTA_FILES = [
   'scripts/v7.9a/seed.mjs',
   'scripts/v7.9a/test-integration.ps1',
   'scripts/v7.9a/test-integration.sh',
-  // PG harness locale fix (CORE/1.15 delta to existing test files).
-  'apps/integration-api/tests/pg-receiver-harness.mjs',
-  'apps/integration-api/tests/pg-orchestrator-harness.mjs',
-  'apps/integration-api/tests/pg-reconcile-harness.mjs',
-  'apps/integration-api/tests/pg-reconciler-harness.mjs',
-  'apps/integration-api/tests/outbox.test.mjs',
-  'apps/integration-worker/tests/pg-worker-harness.mjs',
-  // Handoff document.
+  // Shared embedded-PG bootstrap. Lives inside apps/integration-api/scripts/
+// so its `import 'embedded-postgres'` resolves from apps/integration-api/
+// node_modules (the only place where that dep exists). Auditor recheck
+// (2026-09-19 13:50): start.ps1 was inlining the bootstrap as a heredoc
+// and running it with the wrong cwd (root), which could not resolve
+// embedded-postgres. start.sh was calling scripts/v7.9a/bootstrap-pg.ts
+// which did not exist. Both scripts now invoke this single tracked
+// bootstrap with cwd set to apps/integration-api.
+  'apps/integration-api/scripts/bootstrap-pg.mjs',
+  // Original handoff.
   'docs/contracts/handoff-core-1.15.md',
-  // CORE/1.15 acceptance harness (full A01-A15 scenarios).
-  'apps/integration-api/tests/acceptance-1.15-demo.mjs',
+  // Manifest generation tooling.
+  'scripts/v7.9a/generate-manifest-1.15.mjs',
+  // This delta handoff document.
+  'docs/contracts/handoff-core-1.15-delta-build-fix.md',
 ];
 
 function sha256(buf) {

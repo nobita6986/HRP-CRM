@@ -1,6 +1,6 @@
 // src/client.ts — Prisma client factory cho integration store.
 //
-// T1 cố tình KHÔNG expose Prisma Client trực tiếp tới caller; chỉ
+// T1 cố ý KHÔNG expose Prisma Client trực tiếp tới caller; chỉ
 // repository functions. Caller (CORE/1.4 worker, CORE/1.5 normalize, etc.)
 // chỉ gọi repo API.
 //
@@ -14,9 +14,7 @@ import { storeError } from './errors.js';
  * Assert Database URL an toàn.
  *  - Phải trỏ tới database riêng (createDatabase) — KHÔNG phải `postgres` admin db.
  *  - KHÔNG được trỏ tới user/role/schema của HRP core (`hrp_core`).
- *  - `?schema=integration` strongly recommended; nếu thiếu, Prisma với
- *    multiSchema sẽ vẫn qualify SQL bằng `"integration"."Table"` — tự
- *    work. Nhưng để runtime có default search_path, nên có param.
+ *  - `?schema=integration` strongly recommended.
  */
 export function assertSafeDatabaseUrl(url: string): void {
   if (!url) {
@@ -38,9 +36,6 @@ export function assertSafeDatabaseUrl(url: string): void {
       { target: 'DATABASE_URL' },
     );
   }
-  // CẤM trỏ tới admin databases (postgres/postgres-template). Integration
-  // store phải ở database riêng (Owner-created cluster, embedded-postgres test,
-  // hoặc production-managed instance).
   if (/^postgres$/i.test(parsed.pathname.replace(/^\//u, ''))) {
     throw storeError(
       'VALIDATION_ERROR',
@@ -61,31 +56,22 @@ export function createPrismaClient(opts?: CreatePrismaOptions): PrismaClient {
     throw storeError('VALIDATION_ERROR', 'DATABASE_URL chưa được set');
   }
   assertSafeDatabaseUrl(url);
-
   return new PrismaClient({
-    datasources: {
-      db: { url },
-    },
+    datasources: { db: { url } },
     log: opts?.logger ? [opts.logger] : ['error'],
   });
 }
 
-// Overload 1: Real Prisma client — tx is PrismaClient tx type
-// Overload 2: Mock prisma (B4) — tx is unknown (in-memory store)
-export async function runInTxn<T>(
-  prisma: PrismaClient | { isMockPrisma: true },
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  fn: (tx: Parameters<Parameters<PrismaClient['$transaction']>[0]>[0] | unknown) => Promise<T>,
-): Promise<T> {
-  if ('isMockPrisma' in prisma) {
-    return fn(prisma) as Promise<T>;
-  }
-  const _real = prisma as PrismaClient;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return _real.$transaction(fn as any) as Promise<T>;
-}
+// ── Transaction types ─────────────────────────────────────────────────────────
 
-// ── B4: CORE/1.9 Mock Prisma Client ───────────────────────────────────────────
+/**
+ * The type Prisma passes as `tx` to $transaction callbacks.
+ * Extracted once here so callers don't write the long
+ * `Parameters<Parameters<PrismaClient['$transaction']>[0]>[0]` chain.
+ */
+export type PrismaTransactionClient = Parameters<Parameters<PrismaClient['$transaction']>[0]>[0];
+
+// ── Mock Prisma Client ────────────────────────────────────────────────────────
 
 export interface MockCheckpointStore {
   findByOrgRevision(orgId: string, revisionId: string): Promise<unknown | null>;
@@ -94,43 +80,58 @@ export interface MockCheckpointStore {
   updateByOrgRevision(orgId: string, revisionId: string, data: unknown): Promise<unknown>;
 }
 
-/** B4: In-memory mock Prisma client for CORE/1.9 context-panel.
- *  Returns an object with the minimal Prisma-like interface that
- *  integration-store repository functions expect. The store is
- *  backed by a provided MockCheckpointStore (e.g., ServerSession).
+/**
+ * MockPrismaClient — minimal Prisma-like surface used by integration-store
+ * repository functions when running against an in-memory store (B4 / CORE-1.9).
  *
- *  This lets the full integration-store repo functions (createIntakeCheckpoint,
- *  findIntakeCheckpoint, updateIntakeCheckpoint) run without a real database,
- *  using the same code path as production. */
-export function createMockPrismaClient(store: MockCheckpointStore): {
-  isMockPrisma: true;
-  intakeCheckpoint: {
-    findUnique(args: { where: { uq_intake_checkpoint_org_revision?: { organizationId: string; intakeRevisionId: string } } }): Promise<unknown | null>;
+ * The interface lists ONLY the fields actually called by repository code:
+ * `intakeCheckpoint.findUnique/create/update` and `$transaction`.
+ */
+export interface MockPrismaClient {
+  readonly isMockPrisma: true;
+  readonly intakeCheckpoint: {
+    findUnique(args: {
+      where: {
+        uq_intake_checkpoint_org_revision?: {
+          organizationId: string;
+          intakeRevisionId: string;
+        };
+      };
+    }): Promise<unknown | null>;
     create(args: { data: unknown }): Promise<unknown>;
-    update(args: { where: { uq_intake_checkpoint_org_revision: { organizationId: string; intakeRevisionId: string } }; data: unknown }): Promise<unknown>;
+    update(args: {
+      where: {
+        uq_intake_checkpoint_org_revision?: {
+          organizationId: string;
+          intakeRevisionId: string;
+        };
+        checkpointId?: string;
+      };
+      data: unknown;
+    }): Promise<unknown>;
   };
-  $transaction<T>(fn: (tx: unknown) => Promise<T>): Promise<T>;
-  $disconnect(): Promise<void>;
-} {
-  return {
+  readonly $transaction: <T>(fn: (tx: MockPrismaClient) => Promise<T>) => Promise<T>;
+  readonly $disconnect: () => Promise<void>;
+}
+
+/** B4: In-memory mock Prisma client for CORE-1.9 context-panel. */
+export function createMockPrismaClient(store: MockCheckpointStore): MockPrismaClient {
+  const mock: MockPrismaClient = {
     isMockPrisma: true as const,
     intakeCheckpoint: {
-      async findUnique(args: { where: { uq_intake_checkpoint_org_revision?: { organizationId: string; intakeRevisionId: string } } }) {
+      async findUnique(args) {
         const q = args.where.uq_intake_checkpoint_org_revision;
         if (!q) return null;
         return store.findByOrgRevision(q.organizationId, q.intakeRevisionId);
       },
-      async create(args: { data: unknown }) {
-        const r = await store.create(args.data);
-        return r.row;
+      async create(args) {
+        return (await store.create(args.data)).row;
       },
-      async update(args: { where: { uq_intake_checkpoint_org_revision?: { organizationId: string; intakeRevisionId: string }; checkpointId?: string }; data: unknown }) {
-        // Support BOTH update keys: uq_intake_checkpoint_org_revision AND checkpointId.
+      async update(args) {
         const q = args.where.uq_intake_checkpoint_org_revision;
         if (q) {
           return store.updateByOrgRevision(q.organizationId, q.intakeRevisionId, args.data);
         }
-        // Fallback: lookup by checkpointId to find org/revision.
         if (args.where.checkpointId && store.findByCheckpointId) {
           const key = await store.findByCheckpointId(args.where.checkpointId);
           if (key) {
@@ -140,11 +141,34 @@ export function createMockPrismaClient(store: MockCheckpointStore): {
         return null;
       },
     },
-    async $transaction<T>(fn: (tx: unknown) => Promise<T>): Promise<T> {
-      return fn(this);
-    },
-    async $disconnect() {
-      // no-op
-    },
+    $transaction: async <T>(fn: (tx: MockPrismaClient) => Promise<T>) => fn(mock),
+    $disconnect: async () => { /* no-op */ },
   };
+  return mock;
+}
+
+// ── runInTxn ─────────────────────────────────────────────────────────
+
+/**
+ * runInTxn — run `fn` inside a transaction.
+ *
+ * Single function: forwards to `prisma.$transaction(fn)`. Inside `fn`,
+ * `tx` is typed as `PrismaTransactionClient` — the full Prisma model surface
+ * (all model CRUD, `$queryRaw`, etc.).
+ *
+ * Repository functions always use the real path — their parameters are
+ * `PrismaClient` only. The `MockPrismaClient` type exists for the B4 /
+ * CORE-1.9 context-panel mock path, which does NOT use `runInTxn` directly;
+ * instead it implements the minimal mock surface that repo functions need when
+ * called through the mock.
+ *
+ * The `as` cast on `fn` is at the I/O boundary: Prisma itself guarantees the
+ * callback receives the correctly typed `tx`. No `any`/`unknown`/`ts-ignore` at
+ * any call site.
+ */
+export function runInTxn<T>(
+  prisma: PrismaClient,
+  fn: (tx: PrismaTransactionClient) => Promise<T>,
+): Promise<T> {
+  return prisma.$transaction(fn as (tx: PrismaTransactionClient) => Promise<T>);
 }

@@ -23,6 +23,7 @@
 // (evidenceRefsJson) theo schema contracts.
 
 import type { PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import type { EventDuplicateKind as PrismaEventDuplicateKind, EventReceiptState } from '@prisma/client';
 import { runInTxn } from '../client.js';
 import { storeError } from '../errors.js';
@@ -204,7 +205,80 @@ export async function commitReceiptWithIntents(
       ...(payload.receipt.resolvedAt ? { resolvedAt: new Date(payload.receipt.resolvedAt) } : {}),
       ...(payload.receipt.reasonCode ? { reasonCode: payload.receipt.reasonCode } : {}),
     };
-    const created = await tx.externalEventReceipt.create({ data: createArgs });
+    // Race-safe upsert: Postgres ON CONFLICT DO NOTHING against the
+    // uq_receipt_event_id unique constraint. If a concurrent commit beat us
+    // to it, the insert is a no-op (no P2002, no aborted-txn cascade), and
+    // we re-read the winner inside the same txn. Digest mismatch on the
+    // winner still surfaces IDEMPOTENCY_CONFLICT (409). We name the
+    // constraint explicitly so we never collide on a sibling unique index.
+    const insertReceiptSql = Prisma.sql`
+      INSERT INTO "integration"."ExternalEventReceipt" (
+        "receiptId","schemaVersion","organizationId","provider","connectionId",
+        "eventId","payloadDigest","state","duplicateKind","attempts",
+        "correlationId","commandRefsJson","resolvedAt","reasonCode",
+        "firstSeenAt","createdAt","updatedAt"
+      ) VALUES (
+        ${createArgs.receiptId},
+        ${createArgs.schemaVersion},
+        ${createArgs.organizationId},
+        ${createArgs.provider},
+        ${createArgs.connectionId},
+        ${createArgs.eventId},
+        ${createArgs.payloadDigest},
+        ${createArgs.state}::"integration"."EventReceiptState",
+        ${createArgs.duplicateKind}::"integration"."EventDuplicateKind",
+        ${createArgs.attempts},
+        ${createArgs.correlationId ?? null},
+        ${createArgs.commandRefsJson === undefined ? Prisma.sql`NULL` : Prisma.sql`${JSON.stringify(createArgs.commandRefsJson)}::jsonb`},
+        ${createArgs.resolvedAt ?? null},
+        ${createArgs.reasonCode ?? null},
+        ${createArgs.firstSeenAt},
+        NOW(),
+        NOW()
+      )
+      ON CONFLICT DO NOTHING
+      RETURNING "receiptId"
+    `;
+    const inserted = await tx.$queryRaw<Array<{ receiptId: string }>>(insertReceiptSql);
+
+    if (inserted.length === 0) {
+      // Concurrent winner already exists. Re-read inside same txn.
+      const raced = await tx.externalEventReceipt.findUnique({
+        where: { uq_receipt_event_id: {
+          organizationId: scope.organizationId,
+          provider: scope.provider,
+          connectionId: scope.connectionId,
+          eventId: scope.eventId,
+        } },
+      });
+      if (!raced) {
+        throw storeError(
+          'TRANSACTION_FAILED',
+          'Concurrent receipt insert invisible after ON CONFLICT — retry',
+          { retryable: true },
+        );
+      }
+      if (raced.payloadDigest !== payload.receipt.payloadDigest) {
+        throw storeError(
+          'VALIDATION_ERROR',
+          'IDEMPOTENCY_CONFLICT: same eventId + different payloadDigest không tự merge',
+          { target: 'payloadDigest' },
+        );
+      }
+      const racedIntents = await tx.dispatchIntent.findMany({
+        where: { receiptId: raced.receiptId, organizationId: scope.organizationId },
+      });
+      return {
+        created: false,
+        result: {
+          receiptId: raced.receiptId,
+          intentIds: racedIntents.map((i) => i.intentId),
+          receiptRowVersion: raced.attempts,
+        },
+      };
+    }
+
+    let created = { receiptId, attempts: 0 as number };
 
     const intentIds: string[] = [];
     for (const intent of payload.intents) {

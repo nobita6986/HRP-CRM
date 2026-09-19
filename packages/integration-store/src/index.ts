@@ -12,6 +12,8 @@ export {
 export type {
   CreatePrismaOptions,
   MockCheckpointStore,
+  MockPrismaClient,
+  PrismaTransactionClient,
 } from './client.js';
 
 export {

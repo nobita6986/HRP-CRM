@@ -6,11 +6,26 @@
   "type": "module",
   "main": "dist/server.js",
   "exports": {
-    ".": "./dist/server.js",
-    "./orchestrator": "./dist/orchestrator/index.js",
-    "./orchestrator/types": "./dist/orchestrator/intake-orchestrator.js",
-    "./gateway": "./dist/gateway/index.js",
-    "./review": "./dist/review/index.js"
+    ".": {
+      "types": "./dist/server.d.ts",
+      "default": "./dist/server.js"
+    },
+    "./orchestrator": {
+      "types": "./dist/orchestrator/index.d.ts",
+      "default": "./dist/orchestrator/index.js"
+    },
+    "./orchestrator/types": {
+      "types": "./dist/orchestrator/intake-orchestrator.d.ts",
+      "default": "./dist/orchestrator/intake-orchestrator.js"
+    },
+    "./gateway": {
+      "types": "./dist/gateway/index.d.ts",
+      "default": "./dist/gateway/index.js"
+    },
+    "./review": {
+      "types": "./dist/review/index.d.ts",
+      "default": "./dist/review/index.js"
+    }
   },
   "scripts": {
     "build": "tsc",
