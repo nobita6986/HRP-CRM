@@ -87,7 +87,7 @@ import { TokenBucketRateLimiter } from './automation/rate-limiter.js';
 import { AutomationIdempotencyStore } from './automation/idempotency-store.js';
 import { MockAutomationAdapter } from './automation/mock-adapter.js';
 
-const VERSION = '1.2.0-core1.8+n8n0.3';
+const VERSION = '1.2.0-core1.8';
 
 /**
  * Singleton gateway instance per process — cho HTTP runtime.
@@ -677,7 +677,14 @@ function assembleAutomationHandlerFromEnv(
     const registry = new AutomationServiceRegistry(valid);
     if (!registry.isConfigured()) return null;
     const deps = buildDefaultGatewayDeps();
-    void AUTOMATION_HTTP_HANDLER_VERSION; // surface for log readers
+    // Surface AUTOMATION_HTTP_HANDLER_VERSION for log/evidence of N8N/0.3.
+    // The N8N boundary has its own version separate from the integration-api
+    // VERSION; the latter is frozen to '1.2.0-core1.8' until CORE bumps.
+    // Logged once at mount so operators can see what wire contract is live
+    // without the value bleeding into /health/live or the public VERSION.
+    console.log(
+      `[integration-api] automation handler mounted: ${AUTOMATION_HTTP_HANDLER_VERSION}`,
+    );
     return new AutomationHttpHandler({
       registry,
       gatewayDeps: deps,

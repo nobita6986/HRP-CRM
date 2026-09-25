@@ -124,12 +124,34 @@ exit=0
   via a captured `requestOptions` argument so "header really
   missing" is asserted, not just "request failed".
 
+## C-07 (N8N/0.3 final-recheck) — VERSION regression fixed
+
+N8N/0.3 originally bumped `apps/integration-api/src/server.ts`
+VERSION from `'1.2.0-core1.8'` to `'1.2.0-core1.8+n8n0.3'` to
+surface N8N work in the public version string. T0 recheck
+flagged this as a candidate-induced regression: the package
+version and frozen server compatibility were not opened for a
+version bump, and N8N already has its own
+`AUTOMATION_HTTP_HANDLER_VERSION`.
+
+The public `VERSION` is restored to `'1.2.0-core1.8'`. The N8N
+boundary keeps `AUTOMATION_HTTP_HANDLER_VERSION` for log and
+evidence only; it does NOT alter `/health/live` / `/health/ready`
+and is NOT blended into the public server VERSION. The handler
+mount log emits the N8N handler version at boot for operators:
+
+```
+[integration-api] automation handler mounted: <AUTOMATION_HTTP_HANDLER_VERSION>
+```
+
+`tests/server.test.mjs` (CORE/1.2 fixture, 12/12 PASS) now passes
+the VERSION, `/health/live`, and `/health/ready` assertions
+without modification. See T0 verdict for `dcaca9f` C-07.
+
 ## Out of scope
 
-- `tests/server.test.mjs` (CORE/1.2 fixture) checks VERSION ==
-  '1.2.0-core1.8'. The N8N/0.3 worktree bumped VERSION to
-  '1.2.0-core1.8+n8n0.3' so this single assertion fails on the
-  bumped string. It is NOT in the C-01..C-06 scope and was not
-  touched. `npm run test` will still surface this pre-existing
-  mismatch; the isolated `node --test` runs above do not run
-  `server.test.mjs` and pass cleanly.
+- N8N/0.3 never modifies the integration-api `VERSION` constant
+  again. Future N8N bumps (N8N/0.4+) surface only through
+  `AUTOMATION_HTTP_HANDLER_VERSION` and the mount log line.
+- `package.json` `version` field (`1.4.0-core1.7`) is the package
+  release pin and is not in scope.
