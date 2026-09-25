@@ -36,3 +36,7 @@ test_results.txt
 .pg7-out.txt
 .combined*.txt
 .pg-recovery-evidence.txt
+
+# B.02 isolated run / reproducer evidence directories (T1-B)
+apps/integration-worker/.b02-evidence/
+apps/integration-worker/.b02-repro/

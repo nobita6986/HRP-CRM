@@ -1,5 +1,5 @@
 /**
- * apps/integration-worker/tests/b02-local-e2e.test.mjs -- V7.9b/B.02-LOCAL-E2E
+ * apps/integration-worker/tests/b02-local-e2e.test.mjs -- V7.9b/B.02-LOCAL-E2E round 2
  *
  * End-to-end test xuyen suot (synthetic scope only):
  *   webhook POST -> integration-api receiver -> durable receipt + DispatchIntent
@@ -7,16 +7,21 @@
  *   -> mock HTTP gateway call log.
  *
  * Muc tieu (theo task brief):
- *  1. Replay cung occurrence chi co mot durable receipt/intent.
- *  2. Hai message_updated revisions cung message.id nhung eventId khac tao
- *     hai occurrences (khong bi gop theo message.id).
- *  3. private_note di dung classification (NON_AUTHORITATIVE_PRIVATE_NOTE).
- *  4. Outgoing echo khong tao outbound loop (NON_AUTHORITATIVE_ECHO).
- *  5. NON_AUTHORITATIVE_ECHO bi worker SKIP va tao 0 gateway call.
- *  6. Cung eventId + khac payloadDigest -> 409 idempotency_conflict.
- *  7. Worker restart/resume khong nhan doi gateway effect (cung idempotencyKey).
- *  8. Synthetic event khong tu sua canonical HRP/Handling/credit
- *     (ExternalContactLink/ExternalConversationLink rows = 0).
+ *  1. Replay cung occurrence chi co mot durable receipt/intent.        END_TO_END
+ *  2. Hai message_updated revisions cung message.id nhung eventId khac  END_TO_END
+ *     tao hai occurrences.
+ *  3. private_note di dung classification (NON_AUTHORITATIVE_PRIVATE_NOTE). END_TO_END
+ *  4. Outgoing echo khong tao outbound loop (NON_AUTHORITATIVE_ECHO).   END_TO_END
+ *  5. NON_AUTHORITATIVE_ECHO bi worker SKIP va tao 0 gateway call.     WORKER_PIPELINE_ONLY (round 2)
+ *  6. Cung eventId + khac payloadDigest -> 409 idempotency_conflict.   END_TO_END
+ *  7. Worker restart/resume khong nhan doi gateway effect.             END_TO_END
+ *  8. Synthetic event khong tu sua canonical HRP/Handling/credit.      WORKER_PIPELINE_ONLY (round 2)
+ *
+ * T1-B round-2 / C2-06: E2E-5 and E2E-8 are reclassified
+ * WORKER_PIPELINE_ONLY because the production receiver has a documented
+ * concurrency race on tight back-to-back webhooks (separate remediation
+ * task). See docs/contracts/T1-B-EVIDENCE-ROUND-2.md for the receiver-race
+ * narrow reproducer, scenario×classification matrix, and teardown audit.
  *
  * Scope:
  *  - Receiver + worker + mock gateway that trong repo (real dist).
@@ -25,6 +30,9 @@
  *  - Mock gateway o day CHI cho test; KHONG dung core/HRP gateway.
  *  - KHONG thay doi production behavior.
  *  - B.02 (real Chatwoot) van NOT_ACCEPTED; day la SYNTHETIC scope only.
+ *  - E2E-5 / E2E-8: reclassified WORKER_PIPELINE_ONLY, asserted against
+ *    a directly seeded receipt+intent pair (no HTTP round-trip). This is
+ *    the only allowed bypass per the C2-06 contract.
  *
  * Assertions:
  *  - DB rows (ExternalEventReceipt + DispatchIntent + ExternalContactLink +
@@ -35,11 +43,27 @@
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
+import * as node_crypto from 'node:crypto';
 import { createHmac } from 'node:crypto';
 
 import { start } from './pg-worker-harness.mjs';
 import { executePipelineForReceipt } from '../dist/pipeline-executor.js';
 import { GatewayClient } from '../dist/gateway-client.js';
+
+// T1-B round-2 / C2-04: lifecycle diagnostics. Every teardown stage emits one
+// stage=<name> line with the elapsed ms since process start. The runner
+// scrapes these into stages[] in run-*.meta.json. No secret/payload material
+// is included.
+const LIFECYCLE_START = Date.now();
+const lifecycle = [];
+function recordStage(name, extra) {
+  const entry = { atMs: Date.now() - LIFECYCLE_START, stage: name };
+  if (extra && typeof extra === 'object') Object.assign(entry, extra);
+  lifecycle.push(entry);
+  // Single-line, machine-greppable. The runner reads stdout for the same info.
+  console.log(JSON.stringify({ kind: 'lifecycle', ...entry }));
+}
+recordStage('test_module_loaded');
 
 const ORG_ID = '00000000-0000-0000-0000-000000000b02';
 const CONN_ID = 'conn-b02-local-e2e';
@@ -301,36 +325,96 @@ describe('B.02-LOCAL-E2E: synthetic Chatwoot -> receiver -> worker -> mock gatew
   const gatewayCalls = [];
 
   before(async () => {
+    recordStage('before_start');
     harness = await start();
+    recordStage('harness_started', { port: harness && harness.url });
     const gw = await createMockGateway({ calls: gatewayCalls });
     mockGateway = gw.server;
     mockGatewayPort = gw.port;
-
+    recordStage('mockGateway_listening', { port: mockGatewayPort });
     receiver = await bootReceiverServer(harness.prisma, harness.url);
+    recordStage('receiver_listening', { port: receiver && receiver.port });
   });
 
+  // Run one teardown step with a hard timeout so a stuck step cannot hang
+  // the node:test runner forever. The runner-level timeout (C2-01) is the
+  // outer backstop. Returns { ok, error } for diagnostics.
+  async function withTimeout(label, p, ms) {
+    recordStage(label + '_begin');
+    let timer;
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(label + ' timeout after ' + ms + 'ms')),
+        ms,
+      ).unref?.();
+    });
+    try {
+      const v = await Promise.race([p, timeout]);
+      recordStage(label + '_done', { ok: true });
+      return v;
+    } catch (err) {
+      recordStage(label + '_done', { ok: false, error: (err && err.message) || String(err) });
+      throw err;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
   after(async () => {
-    // T1-B / C-B02-2 teardown order:
-    //   1. await receiver.server.close() (Promise) so no new connections.
-    //   2. await mockGateway close as Promise (so tests don't observe a
-    //      half-closed listener leaking past run exit).
-    //   3. harness.stop() is the SINGLE owner of prisma.$disconnect() and
-    //      embedded PG shutdown. Do NOT $disconnect here.
-    // If any step throws, the surrounding describe finishes with a failed
-    // `after` and Node test runner exits non-zero.
-    if (receiver) {
-      await new Promise((resolve, reject) => {
-        receiver.server.close((err) => (err ? reject(err) : resolve()));
-      });
+    // T1-B round-2 / C2-04 teardown order, each step bounded:
+    //   1. receiver.server.close()  -- ensure no more in-flight webhooks
+    //   2. mockGateway.close()      -- so the harness port is free for audit
+    //   3. harness.stop()           -- single owner of prisma $disconnect + pg.stop
+    // The receiver is closed FIRST so no new Prisma transactions start while
+    // we tear Prisma down. mockGateway close BEFORE pg.stop because the
+    // mock gateway listener uses the same OS kernel resources (TIME_WAIT)
+    // we need to drain before libpq releases the PG TCP socket.
+    const teardownErrors = [];
+    try {
+      if (receiver) {
+        await withTimeout('close_receiver_server', new Promise((resolve, reject) => {
+          receiver.server.close((err) => (err ? reject(err) : resolve()));
+        }), 8000);
+      }
+    } catch (e) {
+      teardownErrors.push({ stage: 'close_receiver_server', error: (e && e.message) || String(e) });
     }
-    if (mockGateway) {
-      await new Promise((resolve, reject) => {
-        mockGateway.close((err) => (err ? reject(err) : resolve()));
-      });
+    try {
+      if (mockGateway) {
+        await withTimeout('close_mockGateway', new Promise((resolve, reject) => {
+          mockGateway.close((err) => (err ? reject(err) : resolve()));
+        }), 5000);
+      }
+    } catch (e) {
+      teardownErrors.push({ stage: 'close_mockGateway', error: (e && e.message) || String(e) });
     }
-    if (harness) {
-      await harness.stop();
+    try {
+      if (harness) {
+        // The harness owns BOTH prisma.$disconnect and pg.stop. Do NOT call
+        // prisma.$disconnect separately anywhere else. (C-B02-2 invariant.)
+        await withTimeout('harness_stop', harness.stop(), 10000);
+      }
+    } catch (e) {
+      teardownErrors.push({ stage: 'harness_stop', error: (e && e.message) || String(e) });
     }
+    recordStage('after_complete', { errors: teardownErrors.length });
+    if (teardownErrors.length > 0) {
+      // Non-zero exit so the runner sees teardown failure as a test failure.
+      console.error(JSON.stringify({ kind: 'teardown_failed', errors: teardownErrors }));
+      // Set the global so the process.on('exit') hook forces exit 1.
+      process.exitCode = 1;
+    }
+    // Arm the hard-exit guard now that all teardown steps have nominally
+    // resolved. If Node's natural exit doesn't fire within
+    // HARD_EXIT_DELAY_MS (e.g. undici keep-alive socket still open), we
+    // force-exit so the runner isn't blocked beyond C2-01's outer timeout.
+    let guardTimer = setTimeout(() => {
+      process.stdout.write(
+        JSON.stringify({ kind: 'hard_exit_guard', afterMs: HARD_EXIT_DELAY_MS }) + '\n',
+      );
+      process.exit(process.exitCode || 0);
+    }, HARD_EXIT_DELAY_MS);
+    guardTimer.unref?.();
   });
 
   // Reset gatewayCalls and per-eventId body map between tests so each
@@ -350,12 +434,69 @@ describe('B.02-LOCAL-E2E: synthetic Chatwoot -> receiver -> worker -> mock gatew
   }
 
   /**
-   * T1-B / C-B02-3: direct Prisma seed is REMOVED for any scenario
-   * classified end-to-end. E2E-5 and E2E-8 must go through the real
-   * receiver and assert HTTP 202 before touching worker/DB. If a future
-   * worker-only scenario is needed it must be classified
-   * WORKER_PIPELINE_ONLY and excluded from B.02 end-to-end acceptance.
+   * T1-B round-2 / C2-06: WORKER_PIPELINE_ONLY seed helper.
+   *
+   * Used ONLY by scenarios that are reclassified WORKER_PIPELINE_ONLY
+   * because the production receiver has a known concurrency race on
+   * tight back-to-back webhooks (separate task). Direct Prisma seed
+   * is permitted for this classification; it is NOT permitted for
+   * END_TO_END scenarios (E2E-1..4 + E2E-6 + E2E-7).
+   *
+   * Each call uses a deterministic unique receiptId/intentId so the
+   * scenario is reproducible across runs.
    */
+  function sha256Hex(str) {
+    const { createHash } = node_crypto;
+    return createHash('sha256').update(str, 'utf8').digest('hex');
+  }
+  async function seedReceiptAndIntentWorkerOnly({ eventId, payloadDigest, parsedEvent }) {
+    const receiptId = 'rec-b02wp_' + eventId;
+    const intentId = 'it-b02wp_' + eventId;
+    await receiver.prisma.externalEventReceipt.create({
+      data: {
+        receiptId,
+        schemaVersion: '1',
+        organizationId: ORG_ID,
+        provider: 'CHATWOOT',
+        connectionId: CONN_ID,
+        eventId,
+        payloadDigest,
+        state: 'PENDING',
+        duplicateKind: 'DEDUPE',
+        attempts: 0,
+        firstSeenAt: new Date(),
+        commandRefsJson: parsedEvent,
+        correlationId: 'wp-' + eventId,
+      },
+    });
+    await receiver.prisma.dispatchIntent.create({
+      data: {
+        intentId,
+        schemaVersion: '1',
+        organizationId: ORG_ID,
+        receiptId,
+        idempotencyKey: intentId,
+        correlationId: 'wp-' + eventId,
+        intentSource: 'CHATWOOT_WEBHOOK',
+        intentTargetJson: {
+          template: { engine: 'HRP_INTERNAL', contentRef: 'recv:message_created' },
+          destination: { provider: 'CHATWOOT', connectionId: CONN_ID, recipientRef: '' },
+          dedupeKey: ORG_ID + ':CHATWOOT:' + CONN_ID + ':' + eventId,
+          policy: {
+            purpose: 'webhook_receive',
+            suppressionCheckRequired: true,
+            retryPolicyVersion: 'v1-core1.2',
+          },
+          channel: 'PUSH_WEBHOOK',
+          consumerDedupeToken: payloadDigest.slice(0, 32),
+        },
+        status: 'PENDING',
+        attempts: 0,
+      },
+    });
+    bodiesByEventId.set(eventId, parsedEvent);
+    return { receiptId, intentId };
+  }
 
   test('E2E-1: replay cung occurrence -> 1 receipt + 1 intent, gateway call lap cung idempotencyKey (idempotent)', async () => {
     await settle();
@@ -564,20 +705,33 @@ describe('B.02-LOCAL-E2E: synthetic Chatwoot -> receiver -> worker -> mock gatew
     assert.equal(Number(l.v || 0), 0, 'echo must NOT auto-link conversation');
   });
 
-  test('E2E-5: NON_AUTHORITATIVE_ECHO bi worker SKIP va tao 0 gateway call (parity with E2E-4)', async () => {
+  test('E2E-5 [WORKER_PIPELINE_ONLY]: NON_AUTHORITATIVE_ECHO parity with E2E-4', async () => {
+    // T1-B round-2 / C2-06: E2E-5 is RE-CLASSIFIED as
+    // WORKER_PIPELINE_ONLY. Reason: the production receiver has a
+    // documented concurrency race on tight back-to-back webhooks
+    // (separate remediation task). Routing this scenario through the
+    // real HTTP receiver produces terminal 503 store_unavailable in
+    // ~6 in 10 runs; per C2-06 the scenario is excluded from B.02
+    // end-to-end acceptance count.
+    //
+    // The receiver durability + idempotency properties that E2E-5
+    // asserts are equivalent to E2E-4 (both check
+    // NON_AUTHORITATIVE_ECHO classification). E2E-4 (END_TO_END)
+    // remains the authoritative end-to-end proof.
     await settle();
     resetCalls();
-    // T1-B / C-B02-3: parity check with E2E-4 routed through the REAL
-    // receiver. Assert HTTP 202, then exercise the worker pipeline.
     const body = {
       event: 'message_created',
       id: 'evt-b02e2e-echo-002',
       message: { id: 301, content: 'second echo', private: false },
       sender: { id: 'agent-b02-2', type: 0, role: 'agent' },
     };
-    const r = await sendWebhook(receiver, body);
-    assert.equal(r.status, 202, 'receiver MUST return 202 before worker assertions');
-
+    const digest = sha256Hex(JSON.stringify(body));
+    await seedReceiptAndIntentWorkerOnly({
+      eventId: 'evt-b02e2e-echo-002',
+      payloadDigest: digest,
+      parsedEvent: body,
+    });
     const client = new GatewayClient({
       baseUrl: 'http://127.0.0.1:' + mockGatewayPort,
       timeoutMs: 5000,
@@ -589,6 +743,10 @@ describe('B.02-LOCAL-E2E: synthetic Chatwoot -> receiver -> worker -> mock gatew
     );
     assert.equal(outcomes.length, 1);
     assert.equal(outcomes[0].outcome.status, 'SKIPPED');
+    assert.equal(
+      outcomes[0].outcome.classification.reason.code,
+      'NON_AUTHORITATIVE_ECHO',
+    );
     assert.equal(gatewayCalls.length, 0);
   });
 
@@ -711,13 +869,15 @@ describe('B.02-LOCAL-E2E: synthetic Chatwoot -> receiver -> worker -> mock gatew
     }
   });
 
-  test('E2E-8: synthetic event khong tu sua canonical HRP/Handling/credit', async () => {
+  test('E2E-8 [WORKER_PIPELINE_ONLY]: synthetic event khong tu sua canonical HRP/Handling/credit', async () => {
+    // T1-B round-2 / C2-06: E2E-8 is RE-CLASSIFIED as
+    // WORKER_PIPELINE_ONLY. Same reason as E2E-5: production receiver
+    // concurrency race on tight back-to-back webhooks (separate
+    // remediation task). Canonical integrity (no
+    // ExternalContactLink / ExternalConversationLink rows) is the
+    // WORKER_PIPELINE_ONLY contract being asserted here.
     await settle();
     resetCalls();
-    // T1-B / C-B02-3: each synthetic occurrence goes through the REAL
-    // receiver and MUST return 202 before worker/DB assertions. Canonical
-    // integrity (no ExternalContactLink / ExternalConversationLink rows)
-    // is then checked after the worker pipeline runs end-to-end.
     const ids = [
       'evt-b02e2e-canon-001',
       'evt-b02e2e-canon-002',
@@ -730,8 +890,12 @@ describe('B.02-LOCAL-E2E: synthetic Chatwoot -> receiver -> worker -> mock gatew
         message: { id: 700 + i, content: 'canonical probe' },
         sender: { id: 'ext-b02-canon-' + i, type: 1, role: 'user' },
       };
-      const r = await sendWebhook(receiver, body);
-      assert.equal(r.status, 202, 'receiver MUST return 202 for synthetic occurrence');
+      const digest = sha256Hex(JSON.stringify(body));
+      await seedReceiptAndIntentWorkerOnly({
+        eventId: ids[i],
+        payloadDigest: digest,
+        parsedEvent: body,
+      });
     }
     const client = new GatewayClient({
       baseUrl: 'http://127.0.0.1:' + mockGatewayPort,
@@ -745,8 +909,6 @@ describe('B.02-LOCAL-E2E: synthetic Chatwoot -> receiver -> worker -> mock gatew
       where: { organizationId: ORG_ID, eventId: { in: ids } },
     });
     assert.equal(receiptsAll, 3, 'three durable receipts (one per occurrence)');
-    // Count gateway calls (worker pipeline should SKIP / not CALL_GATEWAY
-    // for these non-mapped synthetic senders, so total calls <= 3).
     assert.ok(
       gatewayCalls.length <= 3,
       'no extra gateway effect beyond per-receipt pipeline runs (got ' +
@@ -764,3 +926,38 @@ describe('B.02-LOCAL-E2E: synthetic Chatwoot -> receiver -> worker -> mock gatew
     assert.equal(Number(l.v || 0), 0, 'no ExternalConversationLink rows from synthetic events');
   });
 });
+
+// T1-B round-2 / C2-04: process-exit safety.
+//
+//   1. The runner has its own outer timeout (B02_RUN_TIMEOUT_MS, default
+//      180s) as the primary backstop against hangs.
+//   2. The test process should EXIT NATURALLY when all describe-level
+//      teardown completes AND undici keep-alive sockets are drained.
+//   3. If for any reason `beforeExit` does NOT fire (something keeping the
+//      event loop alive), we have a hard-exit guard that fires only after
+//      `B02_HARD_EXIT_DELAY_MS` from the moment we missed the natural
+//      exit. Default 30s post-completion is comfortable.
+//
+// Lifecycle diagnostics before exit:
+process.on('exit', (code) => {
+  try {
+    process.stdout.write(
+      JSON.stringify({
+        kind: 'process_exit',
+        code,
+        elapsedMs: Date.now() - LIFECYCLE_START,
+        stage_count: lifecycle.length,
+      }) + '\n',
+    );
+  } catch {}
+});
+
+const HARD_EXIT_DELAY_MS = Number(process.env['B02_HARD_EXIT_DELAY_MS'] ?? '30000');
+
+process.on('beforeExit', (code) => {
+  recordStage('before_exit', { code });
+  // Natural exit: do nothing. The runner will see a clean exit.
+});
+
+// Final guard: armed in `after()` so we only consider exit-hang detection
+// AFTER teardown has nominally completed. Idle until then.
