@@ -1,6 +1,6 @@
 {
   "baseUrl": "http://127.0.0.1:15507",
-  "startedAt": "2026-09-17T07:28:42.166Z",
+  "startedAt": "2026-09-24T17:55:34.454Z",
   "tests": [
     {
       "name": "Alt+6 keyboard nav reaches Assistant tab",
@@ -23,9 +23,9 @@
       "note": "3 proposals"
     },
     {
-      "name": "Manager can accept autofill (mutation allowed)",
+      "name": "Manager can accept autofill (draft + confirm; mutation applied)",
       "ok": true,
-      "note": "prop-profile-demo-001-clear-001 · trạng thái: ACCEPTED · con"
+      "note": "draftPanel=true; status=prop-profile-demo-001-clear-001 · trạng thái: ACCEPTED · con"
     },
     {
       "name": "Planning tab commit shows batch result",
@@ -63,7 +63,7 @@
       "note": "sale provider hint"
     }
   ],
-  "endedAt": "2026-09-17T07:28:53.772Z",
+  "endedAt": "2026-09-24T17:55:50.667Z",
   "summary": {
     "passed": 12,
     "failed": 0,

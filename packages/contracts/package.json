@@ -3,13 +3,35 @@
   "version": "0.0.8-g0.8-fixes",
   "private": true,
   "type": "module",
+  "description": "Engagement contracts - frozen root + talent-context-read/v1 additive subpath (CONTRACT-03C.2 r2; additive artifact 0.0.0-r2-candidate.0 pinned).",
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "tsc",
-    "test": "npm run build && node --test tests/*.test.mjs"
+    "test": "npm run build && node --test tests/availability.test.mjs tests/enums-extra.test.mjs tests/enums.legacy.mjs tests/enums.test.mjs tests/envelopes.legacy.mjs tests/envelopes.test.mjs tests/errors.legacy.mjs tests/errors.test.mjs tests/fixtures-coverage-0.7.test.mjs tests/fixtures-fix-f1-f5.test.mjs tests/fixtures-fix-f2-gateway-hrpui.test.mjs tests/gateway-providers-ports.test.mjs tests/identity.test.mjs tests/next-action.test.mjs tests/outbox.test.mjs tests/placement-case-interactions.test.mjs tests/profile-intake.test.mjs tests/queries-events-mappings.test.mjs tests/routing-analytics-kpi-ai.test.mjs tests/scheduling.test.mjs tests/suppression.test.mjs tests/talent-context-read/*.test.mjs"
   },
-  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
-  "files": ["dist"],
-  "devDependencies": { "typescript": "5.7.3" },
-  "dependencies": { "zod": "3.24.2" }
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./talent-context-read/v1": {
+      "types": "./dist/talent-context-read/index.d.ts",
+      "import": "./dist/talent-context-read/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "devDependencies": {
+    "typescript": "5.7.3",
+    "@types/node": "22.10.2"
+  },
+  "dependencies": {
+    "zod": "3.24.2"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
 }

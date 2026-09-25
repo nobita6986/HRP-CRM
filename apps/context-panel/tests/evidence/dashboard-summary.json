@@ -1,6 +1,6 @@
 {
   "baseUrl": "http://127.0.0.1:15501",
-  "startedAt": "2026-09-17T05:42:27.498Z",
+  "startedAt": "2026-09-24T17:55:52.031Z",
   "tests": [
     {
       "name": "Alt+5 keyboard nav reaches Dashboard tab",
@@ -53,7 +53,7 @@
       "note": "manager view clean"
     }
   ],
-  "endedAt": "2026-09-17T05:42:37.872Z",
+  "endedAt": "2026-09-24T17:56:04.799Z",
   "passed": 10,
   "total": 10
 }

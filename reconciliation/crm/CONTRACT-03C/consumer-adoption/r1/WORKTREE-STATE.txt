@@ -1,0 +1,35 @@
+# WORKTREE STATE (CRM Worktree)
+
+Captured at the start of CONTRACT-03C.2 execution.
+
+```
+git rev-parse HEAD: 72643356a0d1355f9dccc3921b47c990ea9c31c1
+git status --short: see below
+remote URL: git@github.com:nobita6986/HRP-CRM.git
+Node: v24.19.0
+npm: 11.x (Windows powershell default)
+dist present in: packages/contracts/dist/, packages/config/dist/,
+                  packages/integration-store/dist/, apps/integration-api/dist/,
+                  apps/integration-worker/dist/, apps/context-panel/dist/,
+                  apps/core-1.10-media/dist/
+node_modules present in: every workspace (npm ci completed during M1)
+```
+
+## git status --short (start-of-task)
+
+Snapshot at the moment the worktree was created and the implementation
+slice began. Subsequent modifications during M1..M5 are recorded in the
+git diff at the implementation commit.
+
+The worktree was created from a clean checkout of `72643356`. The
+primary working tree at `D:\CodeApp\Hrp-Crm` was intentionally NOT
+modified; this evidence bundle and all M1..M5 work happens in the
+isolated worktree `D:\CodeApp\Hrp-Crm-03c2-r2`.
+
+## Branch
+
+- Current branch: `codex/contract03c2-consumer-adoption-r1`
+- Branched from: `72643356a0d1355f9dccc3921b47c990ea9c31c1`
+- Force-pushes: NONE
+- Tags created: NONE
+- Merges into main/master: NONE

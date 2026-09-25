@@ -1,8 +1,139 @@
 {
   "baseUrl": "http://127.0.0.1:15501",
-  "tests": [],
-  "startedAt": "2026-09-17T05:29:10.176Z",
-  "endedAt": "2026-09-17T05:29:10.466Z",
-  "pass": 0,
+  "tests": [
+    {
+      "name": "page loads, React AppShell mounts",
+      "ok": true,
+      "status": 200
+    },
+    {
+      "name": "Talent panel renders header",
+      "ok": true,
+      "talentHeader": "Hồ sơ ứng viên"
+    },
+    {
+      "name": "Talent context-panel renders",
+      "ok": true
+    },
+    {
+      "name": "CurrentRelationship section visible (read-only)",
+      "ok": true
+    },
+    {
+      "name": "PlacementCase section visible",
+      "ok": true
+    },
+    {
+      "name": "Availability section visible",
+      "ok": true
+    },
+    {
+      "name": "Client panel shows UNAVAILABLE",
+      "ok": true
+    },
+    {
+      "name": "Intake Review panel visible",
+      "ok": true,
+      "count": 1
+    },
+    {
+      "name": "Preview returns candidates",
+      "ok": true
+    },
+    {
+      "name": "Confirmation checkbox NOT prechecked",
+      "ok": true,
+      "initialChecked": false
+    },
+    {
+      "name": "Submit disabled without confirmation",
+      "ok": true
+    },
+    {
+      "name": "Submit enabled after confirmation",
+      "ok": true
+    },
+    {
+      "name": "Intake submit returns mock service result (partial or success)",
+      "ok": true,
+      "partialVisible": true,
+      "successVisible": false
+    },
+    {
+      "name": "Edit after confirm shows invalidation warning",
+      "ok": true
+    },
+    {
+      "name": "Submit disabled after edit invalidates confirmation",
+      "ok": true
+    },
+    {
+      "name": "Narrow panel (380px) renders Talent",
+      "ok": true,
+      "count": 1
+    },
+    {
+      "name": "Narrow panel (380px) renders Intake Review",
+      "ok": true,
+      "count": 1
+    },
+    {
+      "name": "API: forbidden scenario returns 403",
+      "ok": true,
+      "status": 403
+    },
+    {
+      "name": "API: stale scenario returns 409",
+      "ok": true,
+      "status": 409
+    },
+    {
+      "name": "API: timeout scenario returns 408",
+      "ok": true,
+      "status": 408
+    },
+    {
+      "name": "API: partial scenario returns 200 with unavailableFields",
+      "ok": true,
+      "status": 200
+    },
+    {
+      "name": "API: partial scenario body has unavailableFields",
+      "ok": true,
+      "unavailableFields": [
+        "placementCase",
+        "recentInteractions",
+        "nextAction"
+      ]
+    },
+    {
+      "name": "API: client target returns 503 UNAVAILABLE",
+      "ok": true,
+      "status": 503
+    },
+    {
+      "name": "Preview returns candidates without mutation",
+      "ok": true,
+      "candidates": 2
+    },
+    {
+      "name": "API: missing X-HRP-Staff-Id returns 401",
+      "ok": true,
+      "status": 401
+    },
+    {
+      "name": "API: invalid X-HRP-Staff-Id returns 401",
+      "ok": true,
+      "status": 401
+    },
+    {
+      "name": "API: talent-reviewer cannot call /api/intake/run",
+      "ok": true,
+      "status": 403
+    }
+  ],
+  "startedAt": "2026-09-24T17:54:46.398Z",
+  "endedAt": "2026-09-24T17:54:54.468Z",
+  "pass": 27,
   "fail": 0
 }

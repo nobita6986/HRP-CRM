@@ -1,5 +1,5 @@
 # CORE/1.9 — Handoff Manifest
-# Date: 2026-09-18T07:03:02.643Z
+# Date: 2026-09-24T17:48:18.013Z
 # Generator: scripts/generate-manifest.mjs (SHA-256)
 # Total files: 39
 #
@@ -39,12 +39,12 @@ FILE|apps/context-panel/tests/security-evidence.mjs|783ba9ae1c6e9984c29f1b0df297
 FILE|apps/context-panel/tests/manifest-readonly.test.mjs|530f719ec1977e10d55be67fc6549a65418b20b116c44bdfaaef5b230f0575cc
 FILE|apps/context-panel/tests/routing-simulator.test.mjs|1f5338d77f859a921909ad1421594c7b14a348a85b62e6ffc05e94c06a5b676b
 FILE|apps/context-panel/tests/routing-api.test.mjs|e22dda71a35802b1edce88ed8c8191b3d85483fb3bf319e8ca748c34a04a4683
-FILE|apps/context-panel/tests/evidence/summary.json|563a5bfc34563740f0001c6e015d4a693216316e59730acaa792f42f43714605
-FILE|apps/context-panel/tests/evidence/summary.r2.json|eb887248469519c434f11ef2fbc2ac64e157183b0d47a13059056fe57f20c010
-FILE|apps/context-panel/tests/evidence/summary.r3.json|5d96ef739135ce0dee2ebf5958773034c629d502c9afbffa30104232bab9a578
+FILE|apps/context-panel/tests/evidence/summary.json|9ec7b5bd558858d901b81cf59b12aef948bd65a2c2ec793c2c62b1ea644fed8b
+FILE|apps/context-panel/tests/evidence/summary.r2.json|43ff6669c2f9c88b934c882d67369200e0e9457de81b35a314c72fbfdd739ad6
+FILE|apps/context-panel/tests/evidence/summary.r3.json|d566888e1b35dff3b7d229b549f601e237e6bdaeb256504c9dd8ca3b9e90a74e
 FILE|docs/contracts/handoff-core-1.9.md|59f9f9f4dc135d131dbf5f2c8f8060c4881e6d47317f8fc6e0bbd293800b82f3
 FILE|docs/contracts/handoff-core-1.9.status.md|bbdf958e189e040e3abd9896b94f03994287cdb566e9791019cb828ca5cc1114
-FILE|docs/reviews/audit-core-1.9.md|d739858bb66d6efd566f008fd6f56db9d57b5e36067a4d3b5e149208caf21803
+FILE|docs/reviews/audit-core-1.9.md|ee0d3f3886ad1c80eef32ba03b35db5e05897e5b5a1d04fa4e31d30bafd30446
 
 # Verification (READ-ONLY):
 #   node scripts/generate-manifest.mjs --verify

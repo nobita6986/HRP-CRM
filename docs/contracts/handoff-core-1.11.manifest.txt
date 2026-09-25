@@ -1,5 +1,5 @@
 # CORE/1.11 — Handoff Manifest
-# Date: 2026-09-18T07:03:01.515Z
+# Date: 2026-09-24T17:48:16.896Z
 # Generator: scripts/generate-manifest-1.11.mjs (SHA-256)
 # Total files: 15
 #

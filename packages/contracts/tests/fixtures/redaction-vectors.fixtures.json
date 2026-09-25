@@ -1,0 +1,196 @@
+{
+  "provenance": {
+    "name": "MSG-028 REDACTION-VECTORS",
+    "authoritativeCommit": "49f2dbc34cae66e8d63df5dd5d8cec0c008c4623",
+    "authoritativePath": "reconciliation/hrp/CONTRACT-02B-conformance-response/r2/REDACTION-VECTORS.json",
+    "authoritativeSha256": "a7e7ae0b32629a9dedd2a20031086460a606271c5cf305bbc76c14a76783e428",
+    "byteCount": 4118,
+    "copiedAsFixtureFromAuthoritativeBlob": true,
+    "fixtureNote": "Pinned from MSG-028 authoritative blob verbatim."
+  },
+  "authoritativeVectorsJson": "{\n  \"status\": \"SYNTHETIC_PROPOSAL_ONLY\",\n  \"vectors\": [\n    {\n      \"id\": \"vietnamese\",\n      \"input\": \"Nguyễn Văn An\",\n      \"requested\": true,\n      \"expectedName\": \"N•• V•• A••\",\n      \"expectedUnavailableFields\": []\n    },\n    {\n      \"id\": \"decomposed\",\n      \"input\": \"Élodie Durand\",\n      \"requested\": true,\n      \"expectedName\": \"É•• D••\",\n      \"expectedUnavailableFields\": []\n    },\n    {\n      \"id\": \"one_han_token\",\n      \"input\": \"李 小龍\",\n      \"requested\": true,\n      \"expectedName\": null,\n      \"expectedUnavailableFields\": [\n        \"identitySummary\"\n      ]\n    },\n    {\n      \"id\": \"multi_han\",\n      \"input\": \"小龍\",\n      \"requested\": true,\n      \"expectedName\": \"小••\",\n      \"expectedUnavailableFields\": []\n    },\n    {\n      \"id\": \"apostrophe_inside\",\n      \"input\": \"O'Connor\",\n      \"requested\": true,\n      \"expectedName\": \"O••\",\n      \"expectedUnavailableFields\": []\n    },\n    {\n      \"id\": \"hyphen_inside\",\n      \"input\": \"Жан-Поль\",\n      \"requested\": true,\n      \"expectedName\": \"Ж••\",\n      \"expectedUnavailableFields\": []\n    },\n    {\n      \"id\": \"short\",\n      \"input\": \"A\",\n      \"requested\": true,\n      \"expectedName\": null,\n      \"expectedUnavailableFields\": [\n        \"identitySummary\"\n      ]\n    },\n    {\n      \"id\": \"missing\",\n      \"input\": null,\n      \"requested\": true,\n      \"expectedName\": null,\n      \"expectedUnavailableFields\": [\n        \"identitySummary\"\n      ]\n    },\n    {\n      \"id\": \"whitespace\",\n      \"input\": \"   \",\n      \"requested\": true,\n      \"expectedName\": null,\n      \"expectedUnavailableFields\": [\n        \"identitySummary\"\n      ]\n    },\n    {\n      \"id\": \"digit\",\n      \"input\": \"A1pha Name\",\n      \"requested\": true,\n      \"expectedName\": null,\n      \"expectedUnavailableFields\": [\n        \"identitySummary\"\n      ]\n    },\n    {\n      \"id\": \"bidi\",\n      \"input\": \"User‮Name\",\n      \"requested\": true,\n      \"expectedName\": null,\n      \"expectedUnavailableFields\": [\n        \"identitySummary\"\n      ]\n    },\n    {\n      \"id\": \"emoji\",\n      \"input\": \"👩‍💻 Test\",\n      \"requested\": true,\n      \"expectedName\": null,\n      \"expectedUnavailableFields\": [\n        \"identitySummary\"\n      ]\n    },\n    {\n      \"id\": \"leading_apostrophe\",\n      \"input\": \"'Alpha\",\n      \"requested\": true,\n      \"expectedName\": null,\n      \"expectedUnavailableFields\": [\n        \"identitySummary\"\n      ]\n    },\n    {\n      \"id\": \"leading_hyphen\",\n      \"input\": \"-Alpha\",\n      \"requested\": true,\n      \"expectedName\": null,\n      \"expectedUnavailableFields\": [\n        \"identitySummary\"\n      ]\n    },\n    {\n      \"id\": \"leading_mark\",\n      \"input\": \"́Alpha\",\n      \"requested\": true,\n      \"expectedName\": null,\n      \"expectedUnavailableFields\": [\n        \"identitySummary\"\n      ]\n    },\n    {\n      \"id\": \"trailing_punctuation\",\n      \"input\": \"Alpha-\",\n      \"requested\": true,\n      \"expectedName\": null,\n      \"expectedUnavailableFields\": [\n        \"identitySummary\"\n      ]\n    },\n    {\n      \"id\": \"one_letter_mark\",\n      \"input\": \"É\",\n      \"requested\": true,\n      \"expectedName\": null,\n      \"expectedUnavailableFields\": [\n        \"identitySummary\"\n      ]\n    },\n    {\n      \"id\": \"combining_initial\",\n      \"input\": \"Q́uang\",\n      \"requested\": true,\n      \"expectedName\": \"Q́••\",\n      \"expectedUnavailableFields\": []\n    },\n    {\n      \"id\": \"consecutive_punctuation\",\n      \"input\": \"O''Connor\",\n      \"requested\": true,\n      \"expectedName\": null,\n      \"expectedUnavailableFields\": [\n        \"identitySummary\"\n      ]\n    },\n    {\n      \"id\": \"control_tab\",\n      \"input\": \"Alpha\\tBeta\",\n      \"requested\": true,\n      \"expectedName\": null,\n      \"expectedUnavailableFields\": [\n        \"identitySummary\"\n      ]\n    },\n    {\n      \"id\": \"unicode_spaces\",\n      \"input\": \" Alpha Beta \",\n      \"requested\": true,\n      \"expectedName\": \"A•• B••\",\n      \"expectedUnavailableFields\": []\n    },\n    {\n      \"id\": \"unrequested\",\n      \"input\": \"Nguyễn Văn An\",\n      \"requested\": false,\n      \"expectedName\": null,\n      \"expectedUnavailableFields\": []\n    }\n  ]\n}\n",
+  "vectors": [
+    {
+      "id": "vietnamese",
+      "input": "Nguyễn Văn An",
+      "requested": true,
+      "expectedName": "N•• V•• A••",
+      "expectedUnavailableFields": []
+    },
+    {
+      "id": "decomposed",
+      "input": "Élodie Durand",
+      "requested": true,
+      "expectedName": "É•• D••",
+      "expectedUnavailableFields": []
+    },
+    {
+      "id": "one_han_token",
+      "input": "李 小龍",
+      "requested": true,
+      "expectedName": null,
+      "expectedUnavailableFields": [
+        "identitySummary"
+      ]
+    },
+    {
+      "id": "multi_han",
+      "input": "小龍",
+      "requested": true,
+      "expectedName": "小••",
+      "expectedUnavailableFields": []
+    },
+    {
+      "id": "apostrophe_inside",
+      "input": "O'Connor",
+      "requested": true,
+      "expectedName": "O••",
+      "expectedUnavailableFields": []
+    },
+    {
+      "id": "hyphen_inside",
+      "input": "Жан-Поль",
+      "requested": true,
+      "expectedName": "Ж••",
+      "expectedUnavailableFields": []
+    },
+    {
+      "id": "short",
+      "input": "A",
+      "requested": true,
+      "expectedName": null,
+      "expectedUnavailableFields": [
+        "identitySummary"
+      ]
+    },
+    {
+      "id": "missing",
+      "input": null,
+      "requested": true,
+      "expectedName": null,
+      "expectedUnavailableFields": [
+        "identitySummary"
+      ]
+    },
+    {
+      "id": "whitespace",
+      "input": "   ",
+      "requested": true,
+      "expectedName": null,
+      "expectedUnavailableFields": [
+        "identitySummary"
+      ]
+    },
+    {
+      "id": "digit",
+      "input": "A1pha Name",
+      "requested": true,
+      "expectedName": null,
+      "expectedUnavailableFields": [
+        "identitySummary"
+      ]
+    },
+    {
+      "id": "bidi",
+      "input": "User‮Name",
+      "requested": true,
+      "expectedName": null,
+      "expectedUnavailableFields": [
+        "identitySummary"
+      ]
+    },
+    {
+      "id": "emoji",
+      "input": "👩‍💻 Test",
+      "requested": true,
+      "expectedName": null,
+      "expectedUnavailableFields": [
+        "identitySummary"
+      ]
+    },
+    {
+      "id": "leading_apostrophe",
+      "input": "'Alpha",
+      "requested": true,
+      "expectedName": null,
+      "expectedUnavailableFields": [
+        "identitySummary"
+      ]
+    },
+    {
+      "id": "leading_hyphen",
+      "input": "-Alpha",
+      "requested": true,
+      "expectedName": null,
+      "expectedUnavailableFields": [
+        "identitySummary"
+      ]
+    },
+    {
+      "id": "leading_mark",
+      "input": "́Alpha",
+      "requested": true,
+      "expectedName": null,
+      "expectedUnavailableFields": [
+        "identitySummary"
+      ]
+    },
+    {
+      "id": "trailing_punctuation",
+      "input": "Alpha-",
+      "requested": true,
+      "expectedName": null,
+      "expectedUnavailableFields": [
+        "identitySummary"
+      ]
+    },
+    {
+      "id": "one_letter_mark",
+      "input": "É",
+      "requested": true,
+      "expectedName": null,
+      "expectedUnavailableFields": [
+        "identitySummary"
+      ]
+    },
+    {
+      "id": "combining_initial",
+      "input": "Q́uang",
+      "requested": true,
+      "expectedName": "Q́••",
+      "expectedUnavailableFields": []
+    },
+    {
+      "id": "consecutive_punctuation",
+      "input": "O''Connor",
+      "requested": true,
+      "expectedName": null,
+      "expectedUnavailableFields": [
+        "identitySummary"
+      ]
+    },
+    {
+      "id": "control_tab",
+      "input": "Alpha\tBeta",
+      "requested": true,
+      "expectedName": null,
+      "expectedUnavailableFields": [
+        "identitySummary"
+      ]
+    },
+    {
+      "id": "unicode_spaces",
+      "input": " Alpha Beta ",
+      "requested": true,
+      "expectedName": "A•• B••",
+      "expectedUnavailableFields": []
+    },
+    {
+      "id": "unrequested",
+      "input": "Nguyễn Văn An",
+      "requested": false,
+      "expectedName": null,
+      "expectedUnavailableFields": []
+    }
+  ]
+}
