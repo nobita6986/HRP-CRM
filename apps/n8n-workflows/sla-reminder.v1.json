@@ -1,0 +1,192 @@
+{
+  "name": "n8n-0.2-sla-reminder-crm-inactive",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "trigger-schedule-15m",
+      "name": "Schedule Trigger (every 15m)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 200],
+      "disabled": false,
+      "notesInFlow": false,
+      "notes": "Synth reminder schedule. Service identity injected from n8n credentials store by ID 'CRM_AUTOMATION_HMAC'. Workflow does NOT store raw secrets."
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n * Build Automation Gateway request envelope for listDueNextActions.\n * - organizationId, connectionId, serviceId are bound server-side; body is a claim, never trusted alone.\n * - workflowId, workflowRevision, n8nExecutionId are computed inside the n8n host; we read them from $workflow and $execution.\n * - idempotencyKey is stable for the same wall-clock window so retries dedupe at the gateway.\n * - correlationId rides the whole flow; it is tracking only (digest excludes it on purpose).\n */\nconst slug = (s) => String(s || '').replace(/[^A-Za-z0-9._:-]/g, '').slice(0, 128);\nconst idem = 'sla-' + (new Date()).toISOString().slice(0, 16).replace(/[-:T]/g, '');\nconst envelope = {\n  schemaVersion: '1',\n  commandId: 'cmd-' + idem,\n  commandName: 'listDueNextActions',\n  idempotencyKey: idem,\n  correlationId: 'corr-' + idem + '-' + Math.random().toString(36).slice(2, 10),\n  organizationId: $env.HRP_AUTOMATION_ORG_ID,\n  source: { kind: 'HRP_UI', provider: 'HRP_UI', connectionId: null },\n  actor: { kind: 'SERVICE', serviceId: $env.HRP_AUTOMATION_SERVICE_ID },\n  occurredAt: new Date().toISOString(),\n  automationSource: {\n    kind: 'N8N_AUTOMATION',\n    workflowId: slug($workflow.id),\n    workflowRevision: 1,\n    n8nExecutionId: slug($execution.id),\n    workflowLabel: 'sla-reminder-crm'\n  },\n  operation: {\n    op: 'listDueNextActions',\n    payload: {\n      schemaVersion: '1',\n      statusFilter: 'OVERDUE_ONLY',\n      pageSize: 50\n    }\n  }\n};\nconst rawBody = JSON.stringify(envelope);\nreturn [\n  {\n    json: {\n      envelope: envelope,\n      rawBody: rawBody,\n      credentialId: 'CRM_AUTOMATION_HMAC'\n    }\n  }\n];\n"
+      },
+      "id": "function-build-envelope",
+      "name": "Build envelope (listDueNextActions)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [460, 200],
+      "disabled": false,
+      "notesInFlow": false,
+      "notes": "No raw body, PII, or secret in the envelope. Body is the claim; signing happens in HTTP Request node."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.HRP_AUTOMATION_GATEWAY_URL}}/v1/automation/listDueNextActions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "X-Automation-Source", "value": "n8n" },
+            { "name": "X-Automation-Workflow", "value": "={{$node[\"function-build-envelope\"].json.envelope.automationSource.workflowId}}" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": []
+        },
+        "specifyBody": "json",
+        "jsonBody": "={{$node[\"function-build-envelope\"].json.envelope}}",
+        "options": {
+          "timeout": 5000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "httpNodeCredential": {
+          "id": "CRM_AUTOMATION_HMAC",
+          "name": "CRM_AUTOMATION_HMAC"
+        }
+      },
+      "id": "http-call-gateway",
+      "name": "POST /v1/automation/listDueNextActions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 200],
+      "disabled": false,
+      "notesInFlow": false,
+      "notes": "HMAC signature injected via HMAC credential helper (NOT raw secret). Timeout 5s, 1 retry max, body is the envelope from previous node. REDACTED wire response never carries actor or source."
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n * Group reminder items by assignedToRedacted and acknowledge each batch via the gateway.\n * Acknowledgement is AUDIT-ONLY; it does NOT mutate NextAction status (Plan N8N/1.1 ranh giới).\n * If status != 'APPLIED' we surface the redacted error code; we never log the response body verbatim.\n */\nconst items = ($input.first().json && $input.first().json.data && $input.first().json.data.items) || [];\nconst acks = [];\nconst owners = new Set(items.map((it) => it.assignedToRedacted));\nfor (const owner of owners) {\n  acks.push({\n    json: {\n      envelope: {\n        schemaVersion: '1',\n        commandId: 'cmd-ack-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),\n        commandName: 'acknowledgeReminder',\n        idempotencyKey: 'ack-' + owner + '-' + new Date().toISOString().slice(0, 16).replace(/[-:T]/g, ''),\n        correlationId: $input.first().json.envelope ? $input.first().json.envelope.correlationId : 'corr-' + Date.now(),\n        organizationId: $env.HRP_AUTOMATION_ORG_ID,\n        source: { kind: 'HRP_UI', provider: 'HRP_UI', connectionId: null },\n        actor: { kind: 'SERVICE', serviceId: $env.HRP_AUTOMATION_SERVICE_ID },\n        automationSource: {\n          kind: 'N8N_AUTOMATION',\n          workflowId: ($input.first().json.envelope && $input.first().json.envelope.automationSource && $input.first().json.envelope.automationSource.workflowId) || 'sla-reminder',\n          workflowRevision: 1,\n          n8nExecutionId: ($input.first().json.envelope && $input.first().json.envelope.automationSource && $input.first().json.envelope.automationSource.n8nExecutionId) || 'exec-' + Date.now(),\n          workflowLabel: 'sla-reminder-crm'\n        },\n        operation: {\n          op: 'acknowledgeReminder',\n          payload: {\n            schemaVersion: '1',\n            nextActionId: 'batch-' + owner,\n            notificationOutcome: 'SENT',\n            reminderRevisionId: 'rev-' + new Date().toISOString().slice(0, 10),\n            channel: 'DASHBOARD_ONLY'\n          }\n        }\n      }\n    }\n  });\n}\nreturn acks;\n"
+      },
+      "id": "function-batch-ack",
+      "name": "Build acknowledgement batches",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [900, 200],
+      "disabled": false,
+      "notesInFlow": false
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.HRP_AUTOMATION_GATEWAY_URL}}/v1/automation/acknowledgeReminder",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "specifyBody": "json",
+        "jsonBody": "={{$json.envelope}}",
+        "options": {
+          "timeout": 5000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "httpNodeCredential": {
+          "id": "CRM_AUTOMATION_HMAC",
+          "name": "CRM_AUTOMATION_HMAC"
+        }
+      },
+      "id": "http-ack",
+      "name": "POST /v1/automation/acknowledgeReminder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 200],
+      "disabled": false,
+      "notesInFlow": false,
+      "notes": "Per-item acknowledgement. Idempotency key is per (owner, day) so daily replay dedupes. Timeout 5s."
+    },
+    {
+      "parameters": {
+        "content": "## n8n/0.2 — Follow-up / SLA Reminder (INACTIVE DESIGN)\n\n- Calls CRM Automation Gateway (listDueNextActions + acknowledgeReminder) ONLY.\n- body organizationId/connectionId are resolved server-side; workflow cannot spoof.\n- Local-only credential reference id; raw secret stays in n8n credentials store.\n- Timeout 5s per call. Idempotency dedupes by 16-minute window.\n- Acknowledgement is audit-only; does NOT mutate NextAction status.\n\nINSTRUCTIONS:\n- DO NOT IMPORT into n8n until T0 issues the import command and HRP_AUTOMATION_* env vars + CRM_AUTOMATION_HMAC credential are provisioned by the operator.\n- This file is a designed artifact; see docs/contracts/n8n/N8N-0.2/WORKFLOW.md for the contract and activation criteria.",
+        "height": 280,
+        "width": 360
+      },
+      "id": "sticky-note-context",
+      "name": "Workflow notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [240, 360],
+      "disabled": false,
+      "notesInFlow": false
+    }
+  ],
+  "connections": {
+    "Schedule Trigger (every 15m)": {
+      "main": [
+        [
+          { "node": "Build envelope (listDueNextActions)", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Build envelope (listDueNextActions)": {
+      "main": [
+        [
+          { "node": "POST /v1/automation/listDueNextActions", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "POST /v1/automation/listDueNextActions": {
+      "main": [
+        [
+          { "node": "Build acknowledgement batches", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Build acknowledgement batches": {
+      "main": [
+        [
+          { "node": "POST /v1/automation/acknowledgeReminder", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "timezone": "Asia/Ho_Chi_Minh",
+    "errorWorkflow": "n8n-error-notifier-TBD"
+  },
+  "id": "n8n-sla-reminder-crm-inactive",
+  "meta": {
+    "instanceId": "n8n-crm-instance-TBD",
+    "templateCredsSetupCompleted": false
+  },
+  "tags": [
+    { "name": "n8n-0.2" },
+    { "name": "crm-automation" },
+    { "name": "inactive-design" },
+    { "name": "no-import-without-T0" }
+  ],
+  "pinData": {}
+}
