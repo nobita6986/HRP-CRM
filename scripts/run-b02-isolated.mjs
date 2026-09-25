@@ -1,25 +1,45 @@
 /**
- * scripts/run-b02-isolated.mjs -- T1-B round-2 corrections
+ * scripts/run-b02-isolated.mjs -- T1-B round-3 corrections
  *
- * (C-B02-1, C-B02-5, C-B02-6 + C2-01, C2-02, C2-03)
+ * (C3-01 .. C3-09) Fail-closed B.02 Local E2E isolated gate.
  *
- * Runs the B.02 Local E2E suite N times sequentially. Each run:
+ * Each run:
  *   - gets a unique PG_HARNESS_SUFFIX (timestamp + entropy)
  *   - uses a unique data dir and a unique embedded-PG port
- *   - has a per-run timeout (180s default, override via B02_RUN_TIMEOUT_MS)
- *   - on timeout / signal / spawn error: still writes per-run stdout/stderr,
- *     a run result, and the global summary.json
- *   - audits leftover listeners + processes after exit; FAILED run if any
- *     suffix-scoped listener/process survives
+ *   - has a per-run timeout (180 s default, override via B02_RUN_TIMEOUT_MS)
+ *   - on timeout / signal / spawn error: still writes per-run
+ *     stdout/stderr (REDACTED), meta, and the global summary.json
+ *   - audits leftover listeners after exit; FAILS the run if any
+ *     suffix-scoped listener persists
  *
- * Process-tree cleanup (C2-03) is limited to PIDs that EITHER:
+ * Process-tree cleanup (C3-03) is limited to PIDs that EITHER:
  *   (a) are descendants of the spawned test child, OR
- *   (b) own a TCP listener on the suffix port, OR
- *   (c) are confirmed by `pg_isready` against the suffix port.
+ *   (b) own a TCP listener on the suffix port.
+ * Root child PID is always included. Descendants are collected BEFORE
+ * any kill, and killed leaf-first so the Win32_Process tree stays
+ * walkable. After kill we audit the listener TWICE.
  *
- * Output: a JSON evidence file at
- *   apps/integration-worker/.b02-evidence/<ts>/runs.json  + summary.json
- * plus per-run stdout/stderr captures under the same directory.
+ * GATE_PASS (C3-01) requires ALL of:
+ *   - runsCompleted === runsRequested
+ *   - allExitZero === true
+ *   - allTimedOutFalse === true
+ *   - allPass === true
+ *   - allEightScenarios === true  (each run has 8 subtests, 0 notOk)
+ *   - allTeardownClean === true   (each audit1 && audit2 ok === true)
+ *   - allDataDirClean === true
+ *   - no run had forcedExit / noSpawnError / noExit / spawnError
+ *
+ * Anything else => GATE_FAIL. The fields allExitZero, allTimedOutFalse,
+ * allPass, allEightScenarios, allTeardownClean, allDataDirClean are
+ * included in summary.json for T0 inspection; they are NOT used as a
+ * fallback "verdict when convenient".
+ *
+ * Output:
+ *   apps/integration-worker/.b02-evidence/<ts>/
+ *     run-N.stdout.txt   (REDACTED)
+ *     run-N.stderr.txt   (REDACTED)
+ *     run-N.meta.json    (REDACTED)
+ *     summary.json
  */
 
 import { spawn, execSync } from 'node:child_process';
@@ -38,6 +58,9 @@ const RUN_COUNT = Number(process.env['B02_RUN_COUNT'] ?? '3');
 const RUN_TIMEOUT_MS = Number(process.env['B02_RUN_TIMEOUT_MS'] ?? '180000');
 const TREE_KILL_BUDGET_MS = Number(process.env['B02_TREE_KILL_BUDGET_MS'] ?? '8000');
 const AUDIT_DELAY_MS = Number(process.env['B02_AUDIT_DELAY_MS'] ?? '500');
+// Negative-probe flag (C3-07). When true, the runner expects every run
+// to be a controlled timeout and produces GATE_FAIL accordingly.
+const NEGATIVE_PROBE = process.env['B02_NEGATIVE_PROBE'] === '1';
 
 function deriveSuffix(idx) {
   const ts = Date.now().toString(36);
@@ -50,8 +73,33 @@ function derivePort(suffix) {
 }
 
 /**
- * Parse netstat -ano -p tcp and return listening sockets on the given port.
- * Returns { portHits: [{pid}], ok } or { note: 'netstat unavailable' }.
+ * Redact any accidental payload material BEFORE persisting. The test
+ * itself does not log secrets; this is defense in depth (C3-06).
+ *   - signature=<hex>
+ *   - Bearer <token>
+ *   - X-Chatwoot-Signature: <hex>
+ *   - X-Zalo-Oa-Signature: <hex>
+ *   - Authorization: <scheme> <token>
+ *   - HMAC=...
+ */
+function redact(s) {
+  if (!s) return s;
+  return s
+    .replace(/signature=[A-Fa-f0-9]{16,}/g, 'signature=<redacted>')
+    .replace(/HMAC=[A-Fa-f0-9]{16,}/g, 'HMAC=<redacted>')
+    .replace(/Bearer\s+[A-Za-z0-9._\-+/=]+/g, 'Bearer <redacted>')
+    .replace(/Authorization:\s*[A-Za-z]+\s+[A-Za-z0-9._\-+/=]+/g, 'Authorization: <redacted>')
+    .replace(/X-Chatwoot-Signature:[\s"\x27]*[A-Fa-f0-9]{16,}/g, 'X-Chatwoot-Signature: <redacted>')
+    .replace(/X-Zalo-Oa-Signature:[\s"\x27]*[A-Fa-f0-9]{16,}/g, 'X-Zalo-Oa-Signature: <redacted>')
+    .replace(/secret=[A-Za-z0-9._\-+/=]+/g, 'secret=<redacted>');
+}
+
+/**
+ * Parse netstat -ano -p tcp and return listening sockets on the given
+ * port. Returns { available, lineHits }.
+ *
+ * C3-02: netstat unavailable is reported as `available: false`. Callers
+ * MUST treat that as a FAIL, never as a clean pass.
  */
 function readSockets() {
   let out = '';
@@ -59,9 +107,15 @@ function readSockets() {
     out = execSync('netstat -ano -p tcp', {
       stdio: ['ignore', 'pipe', 'ignore'],
       windowsHide: true,
+      timeout: 10000,
+      maxBuffer: 8 * 1024 * 1024,
     }).toString('utf8');
-  } catch {
-    return { available: false, lineHits: [] };
+  } catch (e) {
+    return {
+      available: false,
+      lineHits: [],
+      toolError: (e && e.message) || 'netstat failed',
+    };
   }
   const lineHits = [];
   const lines = out.split(/\r?\n/);
@@ -75,73 +129,140 @@ function readSockets() {
 function auditLeftovers(port) {
   const r = readSockets();
   if (!r.available) {
-    return { ok: null, portHits: [], note: 'netstat unavailable' };
+    return {
+      ok: null, // null = unknown => C3-02 fail-closed semantics
+      available: false,
+      portHits: [],
+      note: 'netstat unavailable: ' + r.toolError,
+    };
   }
   const portHits = r.lineHits
     .filter((h) => h.port === port)
     .map((h) => ({ pid: h.pid, address: h.address }));
   return {
     ok: portHits.length === 0,
+    available: true,
     portHits,
     note: portHits.length === 0 ? 'no listener on harness port' : 'listener still alive',
   };
 }
 
 /**
- * On Windows, kill the entire process tree of `pid` (PowerShell Get-CimInstance).
- * Filters to descendants + PIDs matching the suffix port to avoid killing
- * unrelated Node/PostgreSQL processes.
+ * C3-03: Scoped process-tree cleanup.
+ *
+ * - Uses `pwsh` (not `powershell.exe`) so the same script works in
+ *   minimal environments without the legacy Windows PowerShell host.
+ * - Adds the root child PID (`-1` if no pid available) into the set.
+ * - Collects the full descendant set BEFORE killing so we never walk
+ *   a tree that we just broke.
+ * - Removes the root PID from the descendant list (descendant set
+ *   contains only non-root PIDs) and kills in REVERSE order so the
+ *   deepest leaves die first.
+ * - Includes any PID that owns a LISTEN socket on the suffix port.
+ * - Reports the kill set back to the runner for evidence.
  */
 async function killTreeScoped(child, suffixPort) {
-  const ps = `
-    $ErrorActionPreference = 'SilentlyContinue'
-    $root = ${child.pid}
-    $port = ${suffixPort}
-    $matches = New-Object System.Collections.Generic.HashSet[int]
-    function AddDescendants($id) {
-      $kids = Get-CimInstance Win32_Process -Filter "ParentProcessId=$id" | Select-Object -ExpandProperty ProcessId
-      foreach ($k in $kids) { if (-not $matches.Contains([int]$k)) { $matches.Add([int]$k) | Out-Null ; Add-Descendants $k } }
-    }
-    AddDescendants $root
-    # also kill any process that owns a listener on the suffix port
-    $conns = Get-NetTCPConnection -State Listen -LocalAddress 127.0.0.1 -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -eq $port }
-    foreach ($c in $conns) { $matches.Add([int]$c.OwningProcess) | Out-Null }
-    foreach ($p in $matches) {
-      Stop-Process -Id $p -Force -ErrorAction SilentlyContinue
-    }
-    Write-Output $matches.Count
-  `;
+  const rootPid = child && child.pid ? child.pid : -1;
+  // ps1 written to a temp file to avoid quoting issues with -Command.
+  const psPath = path.join(
+    process.env['TEMP'] || process.env['TMP'] || '.',
+    'b02-kill-' + rootPid + '-' + randomBytes(3).toString('hex') + '.ps1',
+  );
+  const psBody =
+    `$ErrorActionPreference = 'SilentlyContinue'\n` +
+    `$root = ${rootPid}\n` +
+    `$port = ${suffixPort}\n` +
+    `$descendants = New-Object System.Collections.Generic.List[int]\n` +
+    `$visited = New-Object System.Collections.Generic.HashSet[int]\n` +
+    `function Collect($id) {\n` +
+    `  if ($visited.Contains([int]$id)) { return }\n` +
+    `  $visited.Add([int]$id) | Out-Null\n` +
+    `  $kids = Get-CimInstance Win32_Process -Filter "ParentProcessId=$id" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty ProcessId\n` +
+    `  foreach ($k in $kids) { if ($k -ne $null) { $descendants.Add([int]$k); Collect $k } }\n` +
+    `}\n` +
+    `if ($root -gt 0) { Collect $root }\n` +
+    `$portOwners = New-Object System.Collections.Generic.List[int]\n` +
+    `$conns = Get-NetTCPConnection -State Listen -LocalAddress 127.0.0.1 -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -eq $port }\n` +
+    `foreach ($c in $conns) { $portOwners.Add([int]$c.OwningProcess) }\n` +
+    `# Build leaf-first kill order: descendants deepest first, then port owners, then root.\n` +
+    `$killOrder = @()\n` +
+    `foreach ($d in $descendants) { $killOrder += $d }\n` +
+    `foreach ($p in $portOwners) { if (-not $killOrder.Contains([int]$p) -and [int]$p -ne $root) { $killOrder += $p } }\n` +
+    `if ($root -gt 0) { $killOrder += $root }\n` +
+    `$killed = @()\n` +
+    `foreach ($p in $killOrder) {\n` +
+    `  if ($p -le 0) { continue }\n` +
+    `  $ok = Stop-Process -Id $p -Force -ErrorAction SilentlyContinue\n` +
+    `  if ($?) { $killed += $p }\n` +
+    `}\n` +
+    `Write-Output ('KILLED=' + ($killed -join ','))\n` +
+    `Write-Output ('DESCENDANTS=' + ($descendants -join ','))\n` +
+    `Write-Output ('PORTOWNERS=' + ($portOwners -join ','))\n` +
+    `Write-Output ('ROOT=' + $root)\n`;
+  const fs = await import('node:fs/promises');
+  await fs.writeFile(psPath, psBody, 'utf8');
   try {
-    const out = execSync(`powershell -NoProfile -NonInteractive -Command "${ps.replace(/"/g, '\\"')}"`, {
+    const out = execSync(`pwsh -NoProfile -NonInteractive -File "${psPath}"`, {
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
       timeout: TREE_KILL_BUDGET_MS,
     }).toString('utf8');
-    return { ok: true, killed: Number(out.trim().split(/\s+/).pop() ?? '0') };
+    let killed = [];
+    let descendants = [];
+    let portOwners = [];
+    let root = -1;
+    for (const line of out.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('KILLED=')) {
+        killed = trimmed.slice(7).split(',').filter(Boolean).map((s) => Number(s));
+      } else if (trimmed.startsWith('DESCENDANTS=')) {
+        descendants = trimmed.slice(12).split(',').filter(Boolean).map((s) => Number(s));
+      } else if (trimmed.startsWith('PORTOWNERS=')) {
+        portOwners = trimmed.slice(11).split(',').filter(Boolean).map((s) => Number(s));
+      } else if (trimmed.startsWith('ROOT=')) {
+        root = Number(trimmed.slice(5));
+      }
+    }
+    return { ok: true, root, descendants, portOwners, killed };
   } catch (e) {
-    return { ok: false, killed: 0, note: (e && e.message) || 'killTree failed' };
+    return { ok: false, killed: [], error: (e && e.message) || 'killTree failed' };
+  } finally {
+    await fs.rm(psPath, { force: true }).catch(() => {});
   }
 }
 
 async function childTreeAndClose(child, timeoutMs) {
-  // Race: child close vs timeout. Whoever fires first wins.
   let resolved = false;
   const result = await Promise.race([
     new Promise((resolve) => {
-      child.once('close', (code, signal) => {
-        resolved = true;
-        resolve({ kind: 'close', code, signal });
-      });
-      child.once('error', (err) => {
+      const onClose = (code, signal) => {
         if (resolved) return;
         resolved = true;
-        resolve({ kind: 'error', error: err && err.message ? err.message : String(err) });
-      });
+        resolve({ kind: 'close', code, signal });
+      };
+      const onError = (err) => {
+        if (resolved) return;
+        resolved = true;
+        resolve({ kind: 'error', error: (err && err.message) ? err.message : String(err) });
+      };
+      child.once('close', onClose);
+      child.once('error', onError);
+      // If child already exited before we attached, synthesize 'close'.
+      if (child.exitCode !== null && child.exitCode !== undefined) {
+        onClose(child.exitCode, child.signalCode);
+      } else if (child.killed || child.signalCode !== null) {
+        onClose(null, child.signalCode);
+      }
     }),
     new Promise((resolve) => {
+      // NOT unref'd: we need this timer to keep the event loop alive
+      // while we wait for the child handle to fire close after an
+      // external kill. Without ref, Node may exit prematurely when
+      // only the timer is keeping us going (uncommon but seen on
+      // Windows after Stop-Process).
       setTimeout(() => {
         if (!resolved) resolve({ kind: 'timeout' });
-      }, timeoutMs).unref?.();
+      }, timeoutMs);
     }),
   ]);
   return result;
@@ -158,8 +279,11 @@ async function runOnce(idx, evidenceRunDir) {
   const env = {
     ...process.env,
     PG_HARNESS_SUFFIX: suffix,
-    HRP_ORGANIZATION_ID: process.env['HRP_ORGANIZATION_ID'] ?? '00000000-0000-0000-0000-000000000b02',
+    HRP_ORGANIZATION_ID:
+      process.env['HRP_ORGANIZATION_ID'] ?? '00000000-0000-0000-0000-000000000b02',
     NODE_ENV: 'development',
+    B02_RUN_TIMEOUT_MS: String(RUN_TIMEOUT_MS),
+    B02_HARD_EXIT_DELAY_MS: process.env['B02_HARD_EXIT_DELAY_MS'] ?? '5000',
   };
 
   const cmd = NODE;
@@ -180,11 +304,15 @@ async function runOnce(idx, evidenceRunDir) {
       RUN_TIMEOUT_MS,
   );
 
-  let child;
-  let stdout = '';
-  let stderr = '';
+  const stages = [];
+  function recordStage(name, extra) {
+    stages.push({ atMs: Date.now() - startedAt, stage: name, ...(extra || {}) });
+  }
+
+  let child = null;
+  let stdoutRaw = '';
+  let stderrRaw = '';
   let spawnError = null;
-  let timer;
 
   try {
     child = spawn(cmd, args, {
@@ -193,17 +321,10 @@ async function runOnce(idx, evidenceRunDir) {
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
     });
-    child.stdout.on('data', (d) => (stdout += d.toString()));
-    child.stderr.on('data', (d) => (stderr += d.toString()));
+    child.stdout.on('data', (d) => (stdoutRaw += d.toString()));
+    child.stderr.on('data', (d) => (stderrRaw += d.toString()));
   } catch (err) {
     spawnError = (err && err.message) || String(err);
-  }
-
-  // Lifecycle stage diagnostics so we can attribute hangs if any stage
-  // never finishes. No secret/payload material in these lines.
-  const stages = [];
-  function recordStage(name, extra) {
-    stages.push({ atMs: Date.now() - startedAt, stage: name, ...(extra || {}) });
   }
   recordStage('spawned', spawnError ? { error: spawnError } : { pid: child && child.pid });
 
@@ -219,11 +340,19 @@ async function runOnce(idx, evidenceRunDir) {
       elapsedMs: Date.now() - startedAt,
       outcome: 'SPAWN_ERROR',
       spawnError,
+      exitCode: null,
+      signal: null,
+      timedOut: false,
+      noExit: true,
+      forcedExit: false,
       stages,
+      stdout: redact(stdoutRaw),
+      stderr: redact(stderrRaw || '[no stderr captured]\n'),
     };
+    // C3-06: redact BEFORE writing. No raw stdout/stderr files on disk.
+    await writeFile(stdoutPath, meta.stdout);
+    await writeFile(stderrPath, meta.stderr);
     await writeFile(metaPath, JSON.stringify(meta, null, 2));
-    await writeFile(stdoutPath, stdout);
-    await writeFile(stderrPath, stderr || '[no stderr captured]\n');
     return meta;
   }
 
@@ -233,20 +362,24 @@ async function runOnce(idx, evidenceRunDir) {
   let timedOut = false;
   let signal = null;
   let exitCode = null;
+  let noExit = false;
+  let killResult = null;
 
   if (race.kind === 'timeout') {
     timedOut = true;
     recordStage('killing_tree');
-    await killTreeScoped(child, port);
+    killResult = await killTreeScoped(child, port);
+    recordStage('after_kill', { killedCount: killResult.killed ? killResult.killed.length : 0 });
     // After killTree, give the child a final close race (short budget).
     const finalClose = await childTreeAndClose(child, 5000);
-    recordStage('after_kill', finalClose);
+    recordStage('final_close', finalClose);
     if (finalClose.kind === 'close') {
       exitCode = finalClose.code;
       signal = finalClose.signal;
     } else {
       exitCode = null;
       signal = 'SIGKILL_PENDING';
+      noExit = true;
     }
   } else if (race.kind === 'close') {
     exitCode = race.code;
@@ -254,68 +387,55 @@ async function runOnce(idx, evidenceRunDir) {
   } else if (race.kind === 'error') {
     exitCode = null;
     signal = 'SPAWN_ERROR_EVENT';
+    noExit = true;
     recordStage('error_event', { error: race.error });
   }
   const elapsedMs = Date.now() - startedAt;
 
-  await writeFile(stdoutPath, stdout);
-  await writeFile(stderrPath, stderr);
-
-  // TAP counting. node:test emits nested TAP with:
-  //   ok 1 - tests\\b02-local-e2e.test.mjs   (top-level, suite)
-  //     ok 1 - E2E-1: ...
-  //     ok 2 - E2E-2: ...
-  //   We want the scenario-level counts. Match `ok <n> - E2E-...` (and any
-  //   generic "ok N -" after a `# Subtest:` directive). Indented ok lines
-  //   also count.
+  // TAP counting (subtest-level).
   const tap = { ok: 0, notOk: 0, total: 0, plan: null, subtests: [] };
-  const tapLines = stdout.split(/\r?\n/);
+  const tapLines = stdoutRaw.split(/\r?\n/);
   let inSubtests = false;
-  let lastSubtestLine = -1;
-  for (let idx = 0; idx < tapLines.length; idx++) {
-    const line = tapLines[idx];
+  for (let tlineIdx = 0; tlineIdx < tapLines.length; tlineIdx++) {
+    const line = tapLines[tlineIdx];
     if (line.match(/^# Subtest:/)) {
       inSubtests = true;
       continue;
     }
     if (inSubtests) {
-      // "    ok N - <name>" or "    not ok N - <name>" -- indented by 4 spaces.
       const mOk = line.match(/^\s{2,}ok\s+(\d+)\s+-\s+(.+)$/);
       const mNo = line.match(/^\s{2,}not ok\s+(\d+)\s+-\s+(.+)$/);
       if (mOk) {
         tap.ok += 1;
         tap.total += 1;
         tap.subtests.push({ n: Number(mOk[1]), name: mOk[2], ok: true });
-        lastSubtestLine = idx;
       } else if (mNo) {
         tap.notOk += 1;
         tap.total += 1;
         tap.subtests.push({ n: Number(mNo[1]), name: mNo[2], ok: false });
-        lastSubtestLine = idx;
       } else if (line.match(/^1\.\.\d+/)) {
-        inSubtests = false; // subtest plan closes the suite block
+        inSubtests = false;
       }
     }
   }
-  // Top-level plan (e.g. "1..1" at file scope).
   const planLine = tapLines.find((l) => l.match(/^1\.\.\d+/));
   if (planLine) {
     const m = planLine.match(/^1\.\.(\d+)/);
     if (m) tap.plan = Number(m[1]);
   }
 
-  // Teardown audit (>=2x).
+  // C3-03: audit listener TWICE after the child closes/kills.
   await new Promise((r) => setTimeout(r, AUDIT_DELAY_MS));
   const audit1 = auditLeftovers(port);
   let audit2 = auditLeftovers(port);
-  if (audit2.ok === false) {
-    // A second early-pass audit if the first still saw the listener;
-    // give another 500ms before re-checking.
+  if (audit2.ok === false && audit2.available) {
+    // Listener still alive after first audit; give OS another 500 ms
+    // before re-checking.
     await new Promise((r) => setTimeout(r, 500));
     audit2 = auditLeftovers(port);
   }
 
-  // Data dir cleanup is best-effort but always attempted.
+  // Data dir cleanup.
   let dataDirCleanup = 'not_attempted';
   if (existsSync(dataDir)) {
     try {
@@ -328,19 +448,21 @@ async function runOnce(idx, evidenceRunDir) {
     dataDirCleanup = 'absent';
   }
 
-  const outcome =
-    timedOut ? 'TIMED_OUT' : exitCode === 0 ? 'PASS' : exitCode === null ? 'NO_EXIT' : 'EXIT_NONZERO';
+  // C3-05: forcedExit detection. The test process can only emit a
+  // hard-exit guard (kind=hard_exit_guard) when something kept the
+  // event loop alive after teardown. That is NOT a clean exit.
+  const forcedExit = /\{"kind":"hard_exit_guard"/.test(stdoutRaw);
 
-  // Redact any accidental payload material from stdout/stderr before persisting
-  // (defense in depth; the test itself doesn't log secrets).
-  function redact(s) {
-    if (!s) return s;
-    return s
-      .replace(/signature=[A-Fa-f0-9]+/g, 'signature=<redacted>')
-      .replace(/Bearer\s+[A-Za-z0-9._-]+/g, 'Bearer <redacted>')
-      .replace(/X-Chatwoot-Signature:[\s\x22\x27]*[A-Fa-f0-9]{16,}/g, 'X-Chatwoot-Signature: <redacted>')
-      .replace(/X-Zalo-Oa-Signature:[\s\x22\x27]*[A-Fa-f0-9]{16,}/g, 'X-Zalo-Oa-Signature: <redacted>');
-  }
+  const outcome =
+    timedOut
+      ? 'TIMED_OUT'
+      : exitCode === 0
+        ? forcedExit
+          ? 'PASS_FORCED_EXIT'
+          : 'PASS'
+        : exitCode === null
+          ? 'NO_EXIT'
+          : 'EXIT_NONZERO';
 
   const meta = {
     idx,
@@ -357,16 +479,26 @@ async function runOnce(idx, evidenceRunDir) {
     exitCode,
     signal,
     timedOut,
+    noExit,
+    forcedExit,
+    kill: killResult,
     tap,
-    teardownAudit: { immediatelyAfterExit: audit1, afterDelay: audit2 },
+    teardownAudit: {
+      immediatelyAfterExit: audit1,
+      afterDelay: audit2,
+      toolAvailable: audit1.available,
+    },
     dataDirCleanup,
     stages,
-    stdout: redact(stdout),
-    stderr: redact(stderr),
+    // C3-06: redacted at source. No raw stdout/stderr persisted.
+    stdout: redact(stdoutRaw),
+    stderr: redact(stderrRaw),
   };
+
+  // C3-06: write REDACTED outputs, never the raw bytes.
+  await writeFile(stdoutPath, meta.stdout);
+  await writeFile(stderrPath, meta.stderr);
   await writeFile(metaPath, JSON.stringify(meta, null, 2));
-  // Separate raw stdout/stderr files (already written above) are kept
-  // alongside meta.json; meta.json is the consolidated redacted view.
   return meta;
 }
 
@@ -374,11 +506,9 @@ const evidenceRunDir = path.join(EVIDENCE_DIR, String(Date.now()));
 await mkdir(evidenceRunDir, { recursive: true });
 
 const runs = [];
-let failed = false;
 for (let i = 1; i <= RUN_COUNT; i++) {
   const r = await runOnce(i, evidenceRunDir);
   runs.push(r);
-  const okFlag = r.timedOut ? 'TIMED_OUT' : r.exitCode === 0 ? 'EXIT0' : 'EXIT' + r.exitCode;
   console.log(
     '[run-b02-isolated] run ' +
       i +
@@ -392,68 +522,148 @@ for (let i = 1; i <= RUN_COUNT; i++) {
       r.tap.ok +
       ' notOk=' +
       r.tap.notOk +
+      ' forcedExit=' +
+      r.forcedExit +
+      ' audit1.ok=' +
+      r.teardownAudit.immediatelyAfterExit.ok +
+      ' audit2.ok=' +
+      r.teardownAudit.afterDelay.ok +
       ' elapsed=' +
       r.elapsedMs +
       'ms cleanup=' +
       r.dataDirCleanup,
   );
-  // Continue ALL runs even on first failure so the evidence covers the full
-  // 3-run matrix per C2-07. Mark failed only at the end.
 }
 
+// C3-01: each condition computed explicitly, never re-derived from
+// each other. The verdict is the conjunction of all required fields.
+const runsCompleted = runs.length;
+const runsRequested = RUN_COUNT;
+const allRunsCompleted = runsCompleted === runsRequested;
+const allExitZero = runs.every((r) => r.exitCode === 0);
+const allTimedOutFalse = runs.every((r) => r.timedOut === false);
+const allPass = runs.every((r) => r.outcome === 'PASS');
+const allEightScenarios = runs.every(
+  (r) => (r.tap.subtests || []).length === 8 && r.tap.ok === 8 && r.tap.notOk === 0,
+);
+// C3-02: teardown audit must be ok === true on BOTH passes. ok === null
+// (netstat unavailable) is a FAIL, not a clean pass.
+const allTeardownClean = runs.every(
+  (r) =>
+    r.teardownAudit.immediatelyAfterExit.ok === true &&
+    r.teardownAudit.afterDelay.ok === true,
+);
+const allDataDirClean = runs.every(
+  (r) => r.dataDirCleanup === 'removed' || r.dataDirCleanup === 'absent',
+);
+const noForcedExit = runs.every((r) => r.forcedExit === false);
+const noSpawnError = runs.every((r) => r.outcome !== 'SPAWN_ERROR');
+const noNoExit = runs.every((r) => r.noExit !== true);
+const noExitNonzero = runs.every((r) => r.outcome !== 'EXIT_NONZERO');
+const noPassForced = runs.every((r) => r.outcome !== 'PASS_FORCED_EXIT');
+
+// C3-01 + C3-07: gate verdict. NEGATIVE_PROBE mode inverts: every
+// condition that says "clean" must FAIL (timedOut, exitCode, etc).
+const allClean =
+  allRunsCompleted &&
+  allExitZero &&
+  allTimedOutFalse &&
+  allPass &&
+  allEightScenarios &&
+  allTeardownClean &&
+  allDataDirClean &&
+  noForcedExit &&
+  noSpawnError &&
+  noNoExit &&
+  noExitNonzero &&
+  noPassForced;
+
+const verdict = NEGATIVE_PROBE
+  ? allTimedOutFalse === false &&
+    runs.some((r) => r.timedOut === true) &&
+    runs.every((r) => r.outcome === 'TIMED_OUT') &&
+    allTeardownClean &&
+    allDataDirClean
+    ? 'PROBE_PASS'
+    : 'PROBE_FAIL'
+  : allClean
+    ? 'GATE_PASS'
+    : 'GATE_FAIL';
+
 const summary = {
-  startedAt: new Date().toISOString(),
+  startedAt: new Date(evidenceRunDir.split(path.sep).pop() * 1).toISOString(),
   finishedAt: new Date().toISOString(),
   nodeVersion: process.version,
   platform: process.platform,
   arch: process.arch,
   b02RunTimeoutMs: RUN_TIMEOUT_MS,
-  runsRequested: RUN_COUNT,
-  runsCompleted: runs.length,
-  // Per C2-07 gate:
-  // Per C2-07 gate. The runner parses TAP nested output: top-level
-  // `ok N` is the suite; indented `ok N -` lines are scenarios. We
-  // require 8 scenario-level pass and 0 fail across all runs.
-  allExitZero: runs.every((r) => r.exitCode === 0),
-  allTimedOutFalse: runs.every((r) => r.timedOut === false),
-  allPass: runs.every((r) => r.outcome === 'PASS'),
-  allEightScenarios: runs.every(
-    (r) => (r.tap.subtests || []).length === 8 && (r.tap.ok === 8) && (r.tap.notOk === 0),
-  ),
-  allTeardownClean: runs.every(
-    (r) =>
-      r.teardownAudit.immediatelyAfterExit.ok !== false &&
-      r.teardownAudit.afterDelay.ok !== false,
-  ),
-  allDataDirClean: runs.every((r) => r.dataDirCleanup === 'removed' || r.dataDirCleanup === 'absent'),
-  // Overall verdict:
-  verdict: (runs.every((r) => r.exitCode === 0) &&
-    runs.every((r) => r.timedOut === false) &&
-    runs.every((r) => r.tap.notOk === 0) &&
-    runs.every((r) => r.dataDirCleanup === 'removed' || r.dataDirCleanup === 'absent') &&
-    runs.every((r) =>
-      r.teardownAudit.immediatelyAfterExit.ok !== false &&
-      r.teardownAudit.afterDelay.ok !== false
-    ))
-      ? 'GATE_PASS'
-      : 'GATE_FAIL',
+  negativeProbe: NEGATIVE_PROBE,
+  runsRequested,
+  runsCompleted,
+  // C3-01: every field a separate boolean; all are part of the verdict.
+  allRunsCompleted,
+  allExitZero,
+  allTimedOutFalse,
+  allPass,
+  allEightScenarios,
+  allTeardownClean,
+  allDataDirClean,
+  noForcedExit,
+  noSpawnError,
+  noNoExit,
+  noExitNonzero,
+  noPassForced,
+  verdict,
   runs,
 };
 await writeFile(path.join(evidenceRunDir, 'summary.json'), JSON.stringify(summary, null, 2));
-console.log('[run-b02-isolated] evidence: ' + path.join(evidenceRunDir, 'summary.json'));
+console.log(
+  '[run-b02-isolated] evidence: ' + path.join(evidenceRunDir, 'summary.json'),
+);
 console.log(
   '[run-b02-isolated] verdict=' +
     summary.verdict +
+    ' allRunsCompleted=' +
+    allRunsCompleted +
     ' allExitZero=' +
-    summary.allExitZero +
+    allExitZero +
     ' allTimedOutFalse=' +
-    summary.allTimedOutFalse +
+    allTimedOutFalse +
+    ' allPass=' +
+    allPass +
+    ' allEightScenarios=' +
+    allEightScenarios +
     ' allTeardownClean=' +
-    summary.allTeardownClean +
+    allTeardownClean +
     ' allDataDirClean=' +
-    summary.allDataDirClean,
+    allDataDirClean +
+    ' noForcedExit=' +
+    noForcedExit +
+    ' noSpawnError=' +
+    noSpawnError +
+    ' noNoExit=' +
+    noNoExit +
+    ' noExitNonzero=' +
+    noExitNonzero +
+    ' noPassForced=' +
+    noPassForced,
 );
 
 // Force exit so any open netstat / file watcher handle from inner
 // `execSync` calls cannot block this process from returning to T0.
-setImmediate(() => process.exit(summary.verdict === 'GATE_PASS' ? 0 : 1));
+// We DO NOT use a non-zero exit here; the verdict is already computed.
+// Negative probe convention:
+//   PROBE_PASS => exit 2 (nonzero, signals "timeout path was exercised")
+//   PROBE_FAIL => exit 1 (nonzero, signals "timeout path did not work")
+//   GATE_PASS  => exit 0
+//   GATE_FAIL  => exit 1
+// Per C3-07: expected runner exit is nonzero when negative-probe mode
+// is on (PROBE_PASS is still nonzero so T0's automation can detect a
+// successful negative probe distinctly from a positive gate pass).
+const exitCode =
+  summary.verdict === 'GATE_PASS'
+    ? 0
+    : summary.verdict === 'PROBE_PASS'
+      ? 2
+      : 1;
+setImmediate(() => process.exit(exitCode));

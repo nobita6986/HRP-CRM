@@ -244,6 +244,7 @@ async function sendWebhook(receiver, body) {
       body: bodyBytes,
       headers: {
         'Content-Type': 'application/json',
+        'Connection': 'close',
         'X-Chatwoot-Signature': sig,
         'X-Zalo-Oa-Signature': sig,
       },
@@ -404,17 +405,20 @@ describe('B.02-LOCAL-E2E: synthetic Chatwoot -> receiver -> worker -> mock gatew
       // Set the global so the process.on('exit') hook forces exit 1.
       process.exitCode = 1;
     }
-    // Arm the hard-exit guard now that all teardown steps have nominally
-    // resolved. If Node's natural exit doesn't fire within
-    // HARD_EXIT_DELAY_MS (e.g. undici keep-alive socket still open), we
-    // force-exit so the runner isn't blocked beyond C2-01's outer timeout.
-    let guardTimer = setTimeout(() => {
-      process.stdout.write(
-        JSON.stringify({ kind: 'hard_exit_guard', afterMs: HARD_EXIT_DELAY_MS }) + '\n',
-      );
-      process.exit(process.exitCode || 0);
-    }, HARD_EXIT_DELAY_MS);
-    guardTimer.unref?.();
+    // T1-B round-3 / C3-05: NO hard-exit guard.
+    //
+    // The runner has its own outer timeout (B02_RUN_TIMEOUT_MS, default
+    // 180 s) that force-kills the entire process tree if Node doesn't
+    // exit naturally. A in-process guard that fires `process.exit(0)` is
+    // forbidden by the round-3 contract:
+    //
+    //   "Một open handle sau teardown không được biến thành clean PASS."
+    //   "Ưu tiên bỏ guard hoàn toàn và để outer runner timeout phát hiện leak."
+    //
+    // We therefore do NOT arm a guard. If undici keep-alive sockets or
+    // any other handle keep the event loop alive after `after_complete`,
+    // the runner's outer timeout will catch it as TIMED_OUT and the
+    // pwsh killTree will clean the process tree + suffix-port listener.
   });
 
   // Reset gatewayCalls and per-eventId body map between tests so each
@@ -927,18 +931,18 @@ describe('B.02-LOCAL-E2E: synthetic Chatwoot -> receiver -> worker -> mock gatew
   });
 });
 
-// T1-B round-2 / C2-04: process-exit safety.
+// T1-B round-3 / C3-05: process-exit diagnostics only.
 //
-//   1. The runner has its own outer timeout (B02_RUN_TIMEOUT_MS, default
-//      180s) as the primary backstop against hangs.
-//   2. The test process should EXIT NATURALLY when all describe-level
-//      teardown completes AND undici keep-alive sockets are drained.
-//   3. If for any reason `beforeExit` does NOT fire (something keeping the
-//      event loop alive), we have a hard-exit guard that fires only after
-//      `B02_HARD_EXIT_DELAY_MS` from the moment we missed the natural
-//      exit. Default 30s post-completion is comfortable.
+//   - No hard-exit guard. The runner has its own outer timeout.
+//   - `process.on('exit')` is kept for diagnostics: emits one final
+//     stage record so T0 can see how many teardown stages completed
+//     before the process ended.
+//   - `process.on('beforeExit')` records a stage to mark natural exit.
 //
-// Lifecycle diagnostics before exit:
+// If undici keep-alive sockets or any other handle keep the loop alive
+// after teardown completes, the runner's pwsh killTree will catch it
+// as TIMED_OUT and clean the process tree + suffix-port listener. We
+// rely on the runner, NOT on an in-process exit hack.
 process.on('exit', (code) => {
   try {
     process.stdout.write(
@@ -952,12 +956,6 @@ process.on('exit', (code) => {
   } catch {}
 });
 
-const HARD_EXIT_DELAY_MS = Number(process.env['B02_HARD_EXIT_DELAY_MS'] ?? '30000');
-
 process.on('beforeExit', (code) => {
   recordStage('before_exit', { code });
-  // Natural exit: do nothing. The runner will see a clean exit.
 });
-
-// Final guard: armed in `after()` so we only consider exit-hang detection
-// AFTER teardown has nominally completed. Idle until then.

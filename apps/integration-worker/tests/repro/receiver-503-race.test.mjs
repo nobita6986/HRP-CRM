@@ -61,6 +61,7 @@ async function postWebhook(port, body) {
     body: bodyBytes,
     headers: {
       'Content-Type': 'application/json',
+      'Connection': 'close',
       'X-Chatwoot-Signature': sig,
       'X-Zalo-Oa-Signature': sig,
     },
@@ -141,10 +142,16 @@ describe('REPRO: receiver 503 store_unavailable (C2-05 honest classification)', 
         phase('harness_stop_failed', { error: (e && e.message) || String(e) });
       }
     }
-    // Force-exit after a short delay so undici fetch keep-alives cannot hang
-    // the node:test runner from the runner side (the runner has its own
-    // outer timeout).
-    setTimeout(() => process.exit(process.exitCode || 0), 200).unref?.();
+    // T1-B round-3 / C3-05: NO hard-exit guard.
+    //
+    // The runner has its own outer timeout (B02_REPRO_TIMEOUT_MS, default
+    // 60 s) that force-kills the entire process tree. We rely on the
+    // runner, NOT on an in-process exit hack. See b02-local-e2e.test.mjs
+    // for the matching comment block.
+    //
+    // The reproducer posts with `Connection: close` so undici does not
+    // keep-alive sockets open after the burst completes. This lets Node
+    // exit naturally without an explicit `process.exit()` call.
   });
 
   test('observe burst and record observed classification (REPRO_CONFIRMED vs REPRO_NOT_CONFIRMED)', async () => {
