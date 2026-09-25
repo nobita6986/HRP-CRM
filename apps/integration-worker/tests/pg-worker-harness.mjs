@@ -5,6 +5,11 @@
  *
  * Mirrors apps/integration-api/tests/pg-receiver-harness.mjs but with
  * a different SUFFIX so multiple harnesses don't collide.
+ *
+ * T1-B / C-B02-1, C-B02-2: every run MUST pass an explicit, unique
+ * `PG_HARNESS_SUFFIX` (the runner script derives it from a timestamp +
+ * entropy). Falling back to a random suffix silently would mask parallel
+ * collisions; we fail loud instead so a misconfigured run is visible.
  */
 
 import EmbeddedPostgres from 'embedded-postgres';
@@ -13,8 +18,16 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import pkg from 'pg';
 
-const SUFFIX = process.env['PG_HARNESS_SUFFIX'] ?? `worker_pipeline_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-const PORT = 53000 + Math.abs([...SUFFIX].reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 0)) % 5000;
+// Required by T1-B / C-B02-1. Every call to start() must supply a unique
+// suffix so port + data dir never collide across sequential runs.
+const SUFFIX = process.env['PG_HARNESS_SUFFIX'];
+if (!SUFFIX || typeof SUFFIX !== 'string' || SUFFIX.length < 4) {
+  throw new Error(
+    '[pg-worker-harness] PG_HARNESS_SUFFIX is required and must be a non-trivial string. ' +
+      'Set it explicitly per run (e.g. worker_pipeline_<ts>_<rand>) so port + data dir are isolated.',
+  );
+}
+const PORT = 53000 + (Math.abs([...SUFFIX].reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 0)) % 5000);
 const DATA_DIR = `.tmp_pgdata_worker_${SUFFIX}`;
 const USER = 'integration';
 const PASSWORD = 'synthetic';

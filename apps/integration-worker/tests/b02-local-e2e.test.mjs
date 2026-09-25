@@ -204,15 +204,17 @@ async function sendWebhook(receiver, body) {
   if (eventId !== undefined) {
     bodiesByEventId.set(eventId, parsedForPipeline);
   }
-  // Receiver may transiently 503 on a benign commit-time race
-  // (Prisma+PG18 `RETURNING` empty after ON CONFLICT DO NOTHING in concurrent
-  // first-write races between webhook handler and unrelated tx traffic).
-  // The race is NOT a behavior defect here -- the race-free single-shot path
-  // returns 202; we retry with linear backoff before declaring failure.
+  // T1-B / C-B02-4: terminal 503 store_unavailable MUST fail the scenario
+  // after the full retry budget. We keep attempt/status counts for evidence
+  // but DO NOT log the request body, headers, or signature (no secret /
+  // payload material in stdout).
   let res;
-  let text;
+  let text = '';
+  let attempts = 0;
+  let lastStatus = 0;
   const maxAttempts = 12;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    attempts = attempt + 1;
     res = await fetch(url, {
       method: 'POST',
       body: bodyBytes,
@@ -223,6 +225,7 @@ async function sendWebhook(receiver, body) {
       },
     });
     text = await res.text();
+    lastStatus = res.status;
     if (res.status !== 503) break;
     await new Promise((r) => setTimeout(r, 100 + attempt * 100));
   }
@@ -232,10 +235,16 @@ async function sendWebhook(receiver, body) {
   } catch {
     json = { raw: text };
   }
-  if (res.status >= 500) {
-    console.error('SENDWEBHOOK_5XX', { eventId, status: res.status, body: json });
+  if (lastStatus >= 500) {
+    // Redacted evidence: only attempt count + status code, never body bytes.
+    console.error('SENDWEBHOOK_5XX', { eventId, attempts, status: lastStatus });
+    const err = new Error(
+      `webhook terminal ${lastStatus} after ${attempts} attempts (eventId=${eventId})`,
+    );
+    err.code = 'WEBHOOK_TERMINAL_5XX';
+    throw err;
   }
-  return { status: res.status, body: json };
+  return { status: res.status, body: json, attempts };
 }
 
 /**
@@ -301,12 +310,27 @@ describe('B.02-LOCAL-E2E: synthetic Chatwoot -> receiver -> worker -> mock gatew
   });
 
   after(async () => {
+    // T1-B / C-B02-2 teardown order:
+    //   1. await receiver.server.close() (Promise) so no new connections.
+    //   2. await mockGateway close as Promise (so tests don't observe a
+    //      half-closed listener leaking past run exit).
+    //   3. harness.stop() is the SINGLE owner of prisma.$disconnect() and
+    //      embedded PG shutdown. Do NOT $disconnect here.
+    // If any step throws, the surrounding describe finishes with a failed
+    // `after` and Node test runner exits non-zero.
     if (receiver) {
-      await new Promise((r) => receiver.server.close(() => r()));
-      await receiver.prisma.$disconnect();
+      await new Promise((resolve, reject) => {
+        receiver.server.close((err) => (err ? reject(err) : resolve()));
+      });
     }
-    if (mockGateway) mockGateway.close();
-    if (harness) await harness.stop();
+    if (mockGateway) {
+      await new Promise((resolve, reject) => {
+        mockGateway.close((err) => (err ? reject(err) : resolve()));
+      });
+    }
+    if (harness) {
+      await harness.stop();
+    }
   });
 
   // Reset gatewayCalls and per-eventId body map between tests so each
@@ -326,59 +350,12 @@ describe('B.02-LOCAL-E2E: synthetic Chatwoot -> receiver -> worker -> mock gatew
   }
 
   /**
-   * Seed a receipt + dispatch intent directly via Prisma. Used when the
-   * receiver HTTP path flakes on a known race-window; the worker pipeline
-   * (the real subject of WORKER_PIPELINE_VERIFIED assertions) is still
-   * exercised end-to-end through the mock gateway call log.
+   * T1-B / C-B02-3: direct Prisma seed is REMOVED for any scenario
+   * classified end-to-end. E2E-5 and E2E-8 must go through the real
+   * receiver and assert HTTP 202 before touching worker/DB. If a future
+   * worker-only scenario is needed it must be classified
+   * WORKER_PIPELINE_ONLY and excluded from B.02 end-to-end acceptance.
    */
-  async function seedReceiptAndIntent({ eventId, payloadDigest, parsedEvent }) {
-    const receiptId = `rec-b02e2e-${eventId}-${Date.now().toString(36)}`;
-    const intentId = `it-b02e2e-${eventId}-${Date.now().toString(36)}`;
-    await receiver.prisma.externalEventReceipt.create({
-      data: {
-        receiptId,
-        schemaVersion: '1',
-        organizationId: ORG_ID,
-        provider: 'CHATWOOT',
-        connectionId: CONN_ID,
-        eventId,
-        payloadDigest,
-        state: 'PENDING',
-        duplicateKind: 'DEDUPE',
-        attempts: 0,
-        firstSeenAt: new Date(),
-        commandRefsJson: parsedEvent,
-        correlationId: `seed-${eventId}`,
-      },
-    });
-    await receiver.prisma.dispatchIntent.create({
-      data: {
-        intentId,
-        schemaVersion: '1',
-        organizationId: ORG_ID,
-        receiptId,
-        idempotencyKey: intentId,
-        correlationId: `seed-${eventId}`,
-        intentSource: 'CHATWOOT_WEBHOOK',
-        intentTargetJson: {
-          template: { engine: 'HRP_INTERNAL', contentRef: 'recv:message_created' },
-          destination: { provider: 'CHATWOOT', connectionId: CONN_ID, recipientRef: '' },
-          dedupeKey: `${ORG_ID}:CHATWOOT:${CONN_ID}:${eventId}`,
-          policy: {
-            purpose: 'webhook_receive',
-            suppressionCheckRequired: true,
-            retryPolicyVersion: 'v1-core1.2',
-          },
-          channel: 'PUSH_WEBHOOK',
-          consumerDedupeToken: payloadDigest.slice(0, 32),
-        },
-        status: 'PENDING',
-        attempts: 0,
-      },
-    });
-    bodiesByEventId.set(eventId, parsedEvent);
-    return { receiptId, intentId };
-  }
 
   test('E2E-1: replay cung occurrence -> 1 receipt + 1 intent, gateway call lap cung idempotencyKey (idempotent)', async () => {
     await settle();
@@ -590,28 +567,17 @@ describe('B.02-LOCAL-E2E: synthetic Chatwoot -> receiver -> worker -> mock gatew
   test('E2E-5: NON_AUTHORITATIVE_ECHO bi worker SKIP va tao 0 gateway call (parity with E2E-4)', async () => {
     await settle();
     resetCalls();
-    // Worker-pipeline parity check with E2E-4. Seed a receipt+intent
-    // directly because the receiver HTTP path can race on
-    // ON CONFLICT DO NOTHING + RETURNING [] in tight back-to-back
-    // commits (recorded as RECEIVER_DURABILITY_GAP; production arrivals
-    // are minutes apart in real Chatwoot, not milliseconds). The worker
-    // pipeline (the real subject of this test) still runs end-to-end
-    // through executePipelineForReceipt and the mock gateway call log.
+    // T1-B / C-B02-3: parity check with E2E-4 routed through the REAL
+    // receiver. Assert HTTP 202, then exercise the worker pipeline.
     const body = {
       event: 'message_created',
       id: 'evt-b02e2e-echo-002',
       message: { id: 301, content: 'second echo', private: false },
       sender: { id: 'agent-b02-2', type: 0, role: 'agent' },
     };
-    const { createHash } = await import('node:crypto');
-    const digest = createHash('sha256')
-      .update(JSON.stringify(body))
-      .digest('hex');
-    await seedReceiptAndIntent({
-      eventId: 'evt-b02e2e-echo-002',
-      payloadDigest: digest,
-      parsedEvent: body,
-    });
+    const r = await sendWebhook(receiver, body);
+    assert.equal(r.status, 202, 'receiver MUST return 202 before worker assertions');
+
     const client = new GatewayClient({
       baseUrl: 'http://127.0.0.1:' + mockGatewayPort,
       timeoutMs: 5000,
@@ -621,6 +587,7 @@ describe('B.02-LOCAL-E2E: synthetic Chatwoot -> receiver -> worker -> mock gatew
       client,
       'evt-b02e2e-echo-002',
     );
+    assert.equal(outcomes.length, 1);
     assert.equal(outcomes[0].outcome.status, 'SKIPPED');
     assert.equal(gatewayCalls.length, 0);
   });
@@ -747,14 +714,10 @@ describe('B.02-LOCAL-E2E: synthetic Chatwoot -> receiver -> worker -> mock gatew
   test('E2E-8: synthetic event khong tu sua canonical HRP/Handling/credit', async () => {
     await settle();
     resetCalls();
-    // Seed receipts+intents directly. Same harness reason as E2E-5: the
-    // receiver HTTP path races ON CONFLICT DO NOTHING + RETURNING [] on
-    // tight back-to-back commits. This test is about CANONICAL INTEGRITY
-    // (synthetic events must not produce ExternalContactLink /
-    // ExternalConversationLink rows), not the receiver HTTP path. The
-    // worker pipeline still runs end-to-end through
-    // executePipelineForReceipt and the mock gateway call log.
-    const { createHash } = await import('node:crypto');
+    // T1-B / C-B02-3: each synthetic occurrence goes through the REAL
+    // receiver and MUST return 202 before worker/DB assertions. Canonical
+    // integrity (no ExternalContactLink / ExternalConversationLink rows)
+    // is then checked after the worker pipeline runs end-to-end.
     const ids = [
       'evt-b02e2e-canon-001',
       'evt-b02e2e-canon-002',
@@ -767,14 +730,8 @@ describe('B.02-LOCAL-E2E: synthetic Chatwoot -> receiver -> worker -> mock gatew
         message: { id: 700 + i, content: 'canonical probe' },
         sender: { id: 'ext-b02-canon-' + i, type: 1, role: 'user' },
       };
-      const digest = createHash('sha256')
-        .update(JSON.stringify(body))
-        .digest('hex');
-      await seedReceiptAndIntent({
-        eventId: ids[i],
-        payloadDigest: digest,
-        parsedEvent: body,
-      });
+      const r = await sendWebhook(receiver, body);
+      assert.equal(r.status, 202, 'receiver MUST return 202 for synthetic occurrence');
     }
     const client = new GatewayClient({
       baseUrl: 'http://127.0.0.1:' + mockGatewayPort,
