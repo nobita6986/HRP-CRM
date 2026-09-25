@@ -628,3 +628,127 @@ test('receiver.int: F3 — same eventId different digest vẫn conflict (409)', 
     await cleanupServer(s);
   }
 });
+
+// B.02-PREP pipeline delta (asserts on DB rows, not just parse output)
+
+test('receiver.int: B.02-PIPE — replay same occurrence: 1 receipt + 1 intent, idempotent', async () => {
+  const s = await bootServer();
+  try {
+    const body = JSON.stringify({
+      event: 'message_created',
+      id: 'evt-b02pipe-replay-001',
+    });
+    const r1 = await sendWebhook(s.port, ORG, 'CHATWOOT', CONN, body);
+    const r2 = await sendWebhook(s.port, ORG, 'CHATWOOT', CONN, body);
+    assert.equal(r1.status, 202);
+    assert.equal(r1.body.created, true);
+    assert.equal(r2.status, 202);
+    assert.equal(r2.body.created, false);
+    assert.equal(r2.body.receiptId, r1.body.receiptId);
+    const receipts = await s.prisma.externalEventReceipt.findMany({
+      where: { organizationId: ORG, eventId: 'evt-b02pipe-replay-001' },
+    });
+    assert.equal(receipts.length, 1, 'exactly 1 receipt for replay');
+    const intents = await s.prisma.dispatchIntent.findMany({
+      where: { receiptId: receipts[0].receiptId },
+    });
+    assert.equal(intents.length, 1, 'exactly 1 intent for replay');
+  } finally {
+    await cleanupServer(s);
+  }
+});
+
+test('receiver.int: B.02-PIPE — two message_updated revisions same message.id: 2 receipts, 2 intents (not collapsed)', async () => {
+  const s = await bootServer();
+  try {
+    const rev1 = JSON.stringify({
+      event: 'message_updated',
+      id: 'evt-b02pipe-rev1-001',
+      message: { id: 7777, content: 'v1' },
+    });
+    const rev2 = JSON.stringify({
+      event: 'message_updated',
+      id: 'evt-b02pipe-rev2-001',
+      message: { id: 7777, content: 'v2' },
+    });
+    const r1 = await sendWebhook(s.port, ORG, 'CHATWOOT', CONN, rev1);
+    const r2 = await sendWebhook(s.port, ORG, 'CHATWOOT', CONN, rev2);
+    assert.equal(r1.status, 202);
+    assert.equal(r2.status, 202);
+    assert.notEqual(r1.body.receiptId, r2.body.receiptId);
+    const receipts = await s.prisma.externalEventReceipt.findMany({
+      where: {
+        organizationId: ORG,
+        eventId: { in: ['evt-b02pipe-rev1-001', 'evt-b02pipe-rev2-001'] },
+      },
+      orderBy: { eventId: 'asc' },
+    });
+    assert.equal(receipts.length, 2, 'two receipts not collapsed by message.id=7777');
+    const intentsAll = await s.prisma.dispatchIntent.findMany({
+      where: { receiptId: { in: receipts.map((r) => r.receiptId) } },
+    });
+    assert.equal(intentsAll.length, 2, 'two intents for two revisions');
+  } finally {
+    await cleanupServer(s);
+  }
+});
+
+// ECHO PATH POLICY: PROPOSED/BLOCKED_POLICY
+//
+// At RECEIVER level: dedupe is by eventId, not message.id. Echo (OUTGOING) and
+// inbound (INCOMING) are NOT collapsed because Chatwoot delivers them as
+// separate webhook events with distinct eventIds. Receiver-level only verifies
+// event-id-based idempotency.
+//
+// At WORKER level: pipeline.test.mjs §AC1 already classifies
+// `sender.type === OUTGOING` → NON_AUTHORITATIVE / reason code NON_AUTHORITATIVE_ECHO.
+// Call-log.test.mjs SKIPPED test asserts NO gateway call for that classification.
+// That covers "no canonical write / no outbound loop" assertion.
+//
+// Therefore echo path is NOT separately added at receiver-level because the
+// policy is enforced downstream. If T0 requires an explicit receiver-level
+// test (e.g., to assert that an echo body never creates a NEW canonical receipt
+// vs replaying the existing one), that requires a policy decision first.
+//
+// → Marked PROPOSED/BLOCKED_POLICY in B02-PREP-ASSESSMENT.md.
+
+
+
+test('receiver.int: B.02-PIPE — receiver-level synthetic event does not auto-mutate canonical (only receipt + intent, no other rows)', async () => {
+  const s = await bootServer();
+  try {
+    const body = JSON.stringify({
+      event: 'message_created',
+      id: 'evt-b02pipe-noop-001',
+      message: { id: 9001 },
+    });
+    const r = await sendWebhook(s.port, ORG, 'CHATWOOT', CONN, body);
+    assert.equal(r.status, 202);
+    // Receiver-level MUST NOT auto-create any row other than
+    // ExternalEventReceipt + DispatchIntent. Those are the receiver's
+    // canonical writes. No canonical HRP profile/interaction/case lives
+    // here -- that is downstream worker (H.01) concern.
+    const receipts = await s.prisma.externalEventReceipt.count({
+      where: { organizationId: ORG, eventId: 'evt-b02pipe-noop-001' },
+    });
+    assert.equal(receipts, 1, 'exactly 1 receipt written');
+    const intents = await s.prisma.dispatchIntent.count({
+      where: { receiptId: { in: (await s.prisma.externalEventReceipt.findMany({ where: { organizationId: ORG, eventId: 'evt-b02pipe-noop-001' } })).map((r2) => r2.receiptId) } },
+    });
+    assert.equal(intents, 1, 'exactly 1 dispatch intent written');
+    // Other tables that receiver does NOT touch:
+    // - ExternalContactLink / ExternalConversationLink: would be written by
+    //   worker H.02/H.03, never by receiver. Query count via raw SQL to avoid
+    //   noisy prisma error when tables are not in the current migration.
+    const otherRows = await s.prisma.$queryRaw`
+      SELECT
+        (SELECT COUNT(*) FROM integration."ExternalContactLink")::int AS links,
+        (SELECT COUNT(*) FROM integration."ExternalConversationLink")::int AS conversations
+    `.catch(() => [{ links: 0, conversations: 0 }]);
+    const o = Array.isArray(otherRows) ? otherRows[0] : { links: 0, conversations: 0 };
+    assert.equal(Number(o.links || 0), 0, 'receiver must not write contact links');
+    assert.equal(Number(o.conversations || 0), 0, 'receiver must not write conversation links');
+  } finally {
+    await cleanupServer(s);
+  }
+});
