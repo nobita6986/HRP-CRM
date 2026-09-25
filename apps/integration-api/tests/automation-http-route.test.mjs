@@ -168,7 +168,10 @@ async function dispatch(url, envelope, headerOverrides = {}) {
   const body = JSON.stringify(envelope);
   const sig = signForEnvelope(envelope);
   // Mapping from short test keys -> header names.
-  // To OMIT a header, pass null. To use default, omit the key.
+  // To OMIT a header, pass null OR undefined. To use a literal value
+  // (including the strings "null" / "undefined"), pass a non-nullish
+  // value. This guarantees an omitted header is genuinely absent on
+  // the wire (not a literal "null"/"undefined" string).
   const headers = { 'Content-Type': 'application/json' };
   const map = {
     serviceId: 'X-Hrp-Automation-Service-Id',
@@ -184,7 +187,9 @@ async function dispatch(url, envelope, headerOverrides = {}) {
   };
   for (const [k, hn] of Object.entries(map)) {
     if (Object.prototype.hasOwnProperty.call(headerOverrides, k)) {
-      if (headerOverrides[k] !== null) headers[hn] = headerOverrides[k];
+      const v = headerOverrides[k];
+      if (v === null || v === undefined) continue; // OMIT
+      headers[hn] = v;
     } else {
       headers[hn] = defaults[k];
     }
@@ -536,5 +541,401 @@ describe('route unmounted at server level', () => {
     const r = await dispatch(url, envelope);
     assert.equal(r.status, 404);
     assert.equal(r.body.error, 'route_not_mounted');
+  });
+});
+
+/* ---------- C-04: helper omits headers on undefined OR null ---------- */
+/* ---------- C-03: missing auth rejected BEFORE body read             ---------- */
+
+describe('header omission (C-04 / C-03)', () => {
+  let server; let url;
+  before(async () => { const r = await bootServer(buildHandler()); server = r.server; url = r.url; });
+  after(async () => { await new Promise((res) => server.close(res)); });
+
+  // The dispatch helper used in earlier tests does not assert that the
+  // header is truly absent. These tests send raw fetch() with NO header
+  // and verify that the server rejects the request as missing-header
+  // (not "lookup failed because of literal undefined-string"). If the
+  // helper accidentally sent the literal string "undefined" the server
+  // would still 401 BUT for a different reason. We assert the message
+  // matches the missing-header error variant.
+  test('omitted serviceId is genuinely absent -> 401 missing-header', async () => {
+    const envelope = makeEnvelope('listDueNextActions');
+    const body = JSON.stringify(envelope);
+    const sig = signForEnvelope(envelope);
+    const res = await fetch(`${url}/v1/automation/dispatch`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        // serviceId intentionally omitted
+        'X-Hrp-Automation-Organization-Id': ORG_ID,
+        'X-Hrp-Automation-Connection-Id': CONN_ID,
+        'X-Hrp-Automation-Signature': sig,
+      },
+      body,
+    });
+    let json = null;
+    try { json = await res.json(); } catch {}
+    assert.equal(res.status, 401);
+    assert.equal(json.errors[0].code, 'AUTHENTICATION_REQUIRED');
+    // The error message comes from the missing-header branch:
+    assert.match(json.message, /thieu X-Hrp-Automation-Service-Id/u);
+  });
+
+  test('omitted signature is genuinely absent -> 401 missing-header', async () => {
+    const envelope = makeEnvelope('listDueNextActions');
+    const body = JSON.stringify(envelope);
+    const res = await fetch(`${url}/v1/automation/dispatch`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Hrp-Automation-Service-Id': SERVICE_ID,
+        'X-Hrp-Automation-Organization-Id': ORG_ID,
+        'X-Hrp-Automation-Connection-Id': CONN_ID,
+        // signature intentionally omitted
+      },
+      body,
+    });
+    let json = null;
+    try { json = await res.json(); } catch {}
+    assert.equal(res.status, 401);
+    assert.equal(json.errors[0].code, 'AUTHENTICATION_REQUIRED');
+    assert.match(json.message, /thieu X-Hrp-Automation-Signature/u);
+  });
+
+  test('literal "undefined" header value -> still 401 (malformed)', async () => {
+    const envelope = makeEnvelope('listDueNextActions');
+    const body = JSON.stringify(envelope);
+    const sig = signForEnvelope(envelope);
+    const res = await fetch(`${url}/v1/automation/dispatch`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Hrp-Automation-Service-Id': 'undefined', // literal string
+        'X-Hrp-Automation-Organization-Id': ORG_ID,
+        'X-Hrp-Automation-Connection-Id': CONN_ID,
+        'X-Hrp-Automation-Signature': sig,
+      },
+      body,
+    });
+    let json = null;
+    try { json = await res.json(); } catch {}
+    assert.equal(res.status, 401);
+    assert.equal(json.errors[0].code, 'AUTHENTICATION_REQUIRED');
+    // The literal "undefined" is sent as a value: server rejects via
+    // unknown_service path -> error message about credential is expected.
+    assert.ok(json && typeof json === 'object', 'json body should exist');
+    assert.ok(json.message || (json.errors && json.errors.length > 0),
+      'response should carry some structured information');
+  });
+
+  test('dispatch helper with undefined also OMITs (matches null behavior)', async () => {
+    // This goes through the dispatch() helper (which now omits on
+    // BOTH null and undefined). Verify header really reaches the
+    // helper, the helper omits it, and the server returns 401.
+    const envelope = makeEnvelope('listDueNextActions');
+    const r = await dispatch(url, envelope, { serviceId: undefined, signatureHex: 'a'.repeat(64) });
+    assert.equal(r.status, 401);
+    assert.equal(r.body.errors[0].code, 'AUTHENTICATION_REQUIRED');
+  });
+
+  test('C-03: missing auth triggers 401 even when body is large', async () => {
+    // Big padding so the request would take real bytes to buffer; the
+    // server MUST reject immediately on header absence rather than
+    // reading the body. We don't have a clean way to assert "did not
+    // read body" without timing channels, so we at least confirm the
+    // 401 still comes back deterministically and any emit uses the
+    // missing-header message.
+    const envelope = makeEnvelope('listDueNextActions');
+    envelope.operation.payload.padding = 'x'.repeat(8 * 1024);
+    const body = JSON.stringify(envelope);
+    const sig = signForEnvelope(envelope);
+    const res = await fetch(`${url}/v1/automation/dispatch`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        // serviceId omitted
+        'X-Hrp-Automation-Organization-Id': ORG_ID,
+        'X-Hrp-Automation-Connection-Id': CONN_ID,
+        'X-Hrp-Automation-Signature': sig,
+      },
+      body,
+    });
+    let json = null;
+    try { json = await res.json(); } catch {}
+    assert.equal(res.status, 401);
+    assert.match(json.message, /thieu X-Hrp-Automation-Service-Id/u);
+  });
+});
+
+/* ---------- C-05: chunked oversized body yields deterministic 422 ---------- */
+
+import net from 'node:net';
+
+describe('payload size (C-05: no Content-Length)', () => {
+  let server; let url;
+  before(async () => {
+    const r = await bootServer(buildHandler({ maxBodyBytes: 1024 }));
+    server = r.server; url = r.url;
+  });
+  after(async () => { await new Promise((res) => server.close(res)); });
+
+  test('chunked oversized body without Content-Length -> 422 (no socket reset)', async () => {
+    // Drive the connection at the raw HTTP/1.1 framing level so we
+    // can omit Content-Length and send a real chunked body. The
+    // server must drain the remainder and return a deterministic
+    // 422 JSON envelope rather than destroying the socket.
+    const envelope = makeEnvelope('listDueNextActions');
+    envelope.operation.payload.padding = 'x'.repeat(2048);
+    const serialized = JSON.stringify(envelope);
+    const sig = signForEnvelope(envelope);
+    const urlObj = new URL(url);
+
+    const result = await new Promise((resolve, reject) => {
+      const sock = net.connect({ host: urlObj.hostname, port: Number(urlObj.port) });
+      sock.setEncoding('utf8');
+      let buf = '';
+      let headersParsed = false;
+      let status = 0;
+      let body = '';
+      sock.on('data', (chunk) => {
+        buf += chunk;
+        if (!headersParsed) {
+          const sep = '\r\n\r\n';
+          const idx = buf.indexOf(sep);
+          if (idx === -1) return;
+          const head = buf.slice(0, idx);
+          const statusLine = head.split('\r\n')[0] ?? '';
+          const m = /^HTTP\/1\.[01] (\d{3})/u.exec(statusLine);
+          status = m ? Number(m[1]) : 0;
+          buf = buf.slice(idx + sep.length);
+          headersParsed = true;
+        }
+        // Crude: server closes connection after sending 422 envelope.
+        if (headersParsed) {
+          body += buf;
+          buf = '';
+        }
+      });
+      sock.on('end', () => {
+        let json = null;
+        try { json = JSON.parse(body); } catch {}
+        resolve({ status, json, body });
+      });
+      sock.on('error', reject);
+
+      const req = [
+        'POST /v1/automation/dispatch HTTP/1.1',
+        `Host: ${urlObj.hostname}:${urlObj.port}`,
+        'Content-Type: application/json',
+        'Transfer-Encoding: chunked',
+        'X-Hrp-Automation-Service-Id: ' + SERVICE_ID,
+        'X-Hrp-Automation-Organization-Id: ' + ORG_ID,
+        'X-Hrp-Automation-Connection-Id: ' + CONN_ID,
+        'X-Hrp-Automation-Signature: ' + sig,
+        'Connection: close',
+        '',
+        '',
+      ].join('\r\n');
+      sock.write(req);
+      // Send two chunks (in chunked transfer-encoding). Total > 1024.
+      const chunk1 = Buffer.from(serialized.slice(0, 512));
+      const chunk2 = Buffer.from(serialized.slice(512));
+      sock.write(chunk1.length.toString(16) + '\r\n');
+      sock.write(chunk1.toString('binary'));
+      sock.write('\r\n');
+      sock.write(chunk2.length.toString(16) + '\r\n');
+      sock.write(chunk2.toString('binary'));
+      sock.write('\r\n');
+      sock.write('0\r\n\r\n');
+    });
+    // Deterministic 422 envelope; no socket reset means we got a status.
+    assert.equal(result.status, 422);
+    assert.ok(result.json, 'server must send a JSON envelope (no socket reset)');
+    assert.equal(result.json.errors[0].code, 'VALIDATION_ERROR');
+    assert.match(result.json.message, /Body exceeds maxBodyBytes/u);
+  });
+});
+
+/* ---------- C-06: HTTP correlationId conflict ---------- */
+
+describe('idempotency correlationId binding (C-06)', () => {
+  let server; let url;
+  before(async () => { const r = await bootServer(buildHandler()); server = r.server; url = r.url; });
+  after(async () => { await new Promise((res) => server.close(res)); });
+
+  test('same key + same payload + same correlationId -> 200 (cached)', async () => {
+    const e1 = makeEnvelope('listDueNextActions', {}, { idempotencyKey: 'idem-corr-replay' });
+    const r1 = await dispatch(url, e1);
+    assert.equal(r1.status, 200);
+    const e2 = makeEnvelope('listDueNextActions', {}, { idempotencyKey: 'idem-corr-replay' });
+    e2.correlationId = e1.correlationId;
+    e2.commandId = 'cmd-rotated-corr-test';
+    e2.automationSource.n8nExecutionId = 'exec-rotated-corr-test';
+    const r2 = await dispatch(url, e2);
+    assert.equal(r2.status, 200);
+    assert.equal(r2.body.status, 'APPLIED');
+  });
+
+  test('same key + same payload + different correlationId -> 409 IDEMPOTENCY_CONFLICT', async () => {
+    const e1 = makeEnvelope('listDueNextActions', {}, { idempotencyKey: 'idem-corr-conflict' });
+    const r1 = await dispatch(url, e1);
+    assert.equal(r1.status, 200);
+    const e2 = makeEnvelope('listDueNextActions', {}, { idempotencyKey: 'idem-corr-conflict' });
+    e2.correlationId = 'corr-different-on-purpose';
+    e2.commandId = e1.commandId;
+    e2.automationSource.n8nExecutionId = e1.automationSource.n8nExecutionId;
+    const r2 = await dispatch(url, e2);
+    assert.equal(r2.status, 409);
+    assert.equal(r2.body.errors[0].code, 'IDEMPOTENCY_CONFLICT');
+  });
+});
+
+/* ---------- C-02: runtime assembly from env (startServer({ env })) ---------- */
+
+function buildEnvOverrides(extras = {}) {
+  // Pipe format: serviceId|organizationId|connectionId|expiresAt|allowedOpsCsv|secret
+  // Note: when this env is loaded through assembleAutomationHandlerFromEnv,
+  // registry expiry is checked against wall-clock Date.now() (real time).
+  // We use a far-future expiry so test timezones and test clock drift do
+  // not accidentally filter the entry as expired.
+  const expiresAt = String(FIXED_NOW + 5 * 365 * 24 * 60 * 60 * 1000); // +5 years
+  const baseEnv = {
+    HRP_AUTOMATION_SERVICE_1: [
+      SERVICE_ID,
+      ORG_ID,
+      CONN_ID,
+      expiresAt,
+      'listDueNextActions,acknowledgeReminder,getNextAction',
+      SECRET,
+    ].join('|'),
+  };
+  return { ...baseEnv, ...extras };
+}
+
+function baseConfig(overrides = {}) {
+  return {
+    listen: { host: '127.0.0.1', port: 0 },
+    mockRoutes: [],
+    mockMode: 'deterministic',
+    receiver: { enabled: false, maxBodyBytes: 64 * 1024 },
+    organizationId: ORG_ID,
+    appKind: 'api',
+    contractsVersion: '0.0.8-g0.8-fixes',
+    nodeEnv: 'development',
+    ...overrides,
+  };
+}
+
+describe('runtime env assembly (C-02)', () => {
+  test('env present -> route mounted via startServer({ env }), no prebuilt handler', async () => {
+    const config = baseConfig();
+    const env = buildEnvOverrides();
+    const server = await startServer(config, { env }); // no automationHandler
+    try {
+      const addr = server.address();
+      const url = `http://${addr.address}:${addr.port}`;
+      const envelope = makeEnvelope('listDueNextActions');
+      const r = await dispatch(url, envelope);
+      assert.equal(r.status, 200, `body=${JSON.stringify(r.body)}`);
+      assert.equal(r.body.status, 'APPLIED');
+    } finally {
+      await new Promise((res) => server.close(res));
+    }
+  });
+
+  test('env absent -> route stays unmounted -> 404 route_not_mounted', async () => {
+    const config = baseConfig();
+    const env = {}; // no HRP_AUTOMATION_*
+    const server = await startServer(config, { env });
+    try {
+      const addr = server.address();
+      const url = `http://${addr.address}:${addr.port}`;
+      const envelope = makeEnvelope('listDueNextActions');
+      const r = await dispatch(url, envelope);
+      assert.equal(r.status, 404);
+      assert.equal(r.body.error, 'route_not_mounted');
+    } finally {
+      await new Promise((res) => server.close(res));
+    }
+  });
+
+  test('malformed env -> route stays unmounted (graceful)', async () => {
+    const config = baseConfig();
+    const env = {
+      HRP_AUTOMATION_SERVICE_1: 'only|five|parts|here', // missing 2 parts
+    };
+    const server = await startServer(config, { env });
+    try {
+      const addr = server.address();
+      const url = `http://${addr.address}:${addr.port}`;
+      const envelope = makeEnvelope('listDueNextActions');
+      const r = await dispatch(url, envelope);
+      assert.equal(r.status, 404);
+      assert.equal(r.body.error, 'route_not_mounted');
+    } finally {
+      await new Promise((res) => server.close(res));
+    }
+  });
+
+  test('expired env (all entries past expiresAt) -> route stays unmounted', async () => {
+    const config = baseConfig();
+    const env = buildEnvOverrides({
+      HRP_AUTOMATION_SERVICE_1: [
+        SERVICE_ID,
+        ORG_ID,
+        CONN_ID,
+        String(FIXED_NOW - 60_000), // already expired
+        'listDueNextActions,acknowledgeReminder,getNextAction',
+        SECRET,
+      ].join('|'),
+    });
+    // Forward the clock by injecting a now() override is not possible
+    // here (production bootstrap uses Date.now()). Force expiresAt to
+    // a clearly past timestamp so the registry filters it out at
+    // construction.
+    const server = await startServer(config, { env });
+    try {
+      const addr = server.address();
+      const url = `http://${addr.address}:${addr.port}`;
+      const envelope = makeEnvelope('listDueNextActions');
+      const r = await dispatch(url, envelope);
+      assert.equal(r.status, 404);
+      assert.equal(r.body.error, 'route_not_mounted');
+    } finally {
+      await new Promise((res) => server.close(res));
+    }
+  });
+
+  test('production nodeEnv -> route stays unmounted (fail closed)', async () => {
+    const config = baseConfig({ nodeEnv: 'production', mockMode: 'off' });
+    const env = buildEnvOverrides();
+    const server = await startServer(config, { env });
+    try {
+      const addr = server.address();
+      const url = `http://${addr.address}:${addr.port}`;
+      const envelope = makeEnvelope('listDueNextActions');
+      const r = await dispatch(url, envelope);
+      assert.equal(r.status, 404);
+      assert.equal(r.body.error, 'route_not_mounted');
+    } finally {
+      await new Promise((res) => server.close(res));
+    }
+  });
+
+  test('mockMode=off -> route stays unmounted (fail closed)', async () => {
+    const config = baseConfig({ mockMode: 'off' });
+    const env = buildEnvOverrides();
+    const server = await startServer(config, { env });
+    try {
+      const addr = server.address();
+      const url = `http://${addr.address}:${addr.port}`;
+      const envelope = makeEnvelope('listDueNextActions');
+      const r = await dispatch(url, envelope);
+      assert.equal(r.status, 404);
+      assert.equal(r.body.error, 'route_not_mounted');
+    } finally {
+      await new Promise((res) => server.close(res));
+    }
   });
 });

@@ -104,12 +104,19 @@ tests; reserved for future operations.)
 
 ## Cache semantics (idempotency)
 
-- Same `(scopeKey, payloadDigest)` -> cached `APPLIED` is returned
-  WITHOUT re-running the adapter.
+- Same `(scopeKey, payloadDigest, correlationId)` -> cached
+  `APPLIED` is returned WITHOUT re-running the adapter.
 - Same `idempotencyKey` but different payload digest -> 409
-  `IDEMPOTENCY_CONFLICT`.
-- Different `correlationId` / `n8nExecutionId` with the SAME digest
-  -> cache hit (they are NOT part of the digest).
+  `IDEMPOTENCY_CONFLICT` (`payload_digest_mismatch`).
+- Same `idempotencyKey` + same payload digest + DIFFERENT
+  `correlationId` -> 409 `IDEMPOTENCY_CONFLICT`
+  (`correlation_id_mismatch`). The first-seen correlationId
+  is bound to the idempotency record; rotating it means the
+  caller is no longer the same logical workflow run, so the
+  gateway cannot silently replay the cached execution.
+- `commandId` and `n8nExecutionId` may rotate freely. They
+  are tracking-only and do not participate in either the
+  digest or the idempotency record.
 
 ## Body size limit
 

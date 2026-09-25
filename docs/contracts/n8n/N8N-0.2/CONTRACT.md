@@ -109,7 +109,7 @@ name, no email/phone/CCCD. Only opaque ids (`nextActionId`,
 | VALIDATION_ERROR        | 422  | NEVER                  | Schema fail; payload-too-large; commandName mismatch |
 | AUTHENTICATION_REQUIRED | 401  | REAUTHENTICATE         | Signature mismatch; credential expired; unknown service |
 | FORBIDDEN               | 403  | NEVER                  | Body organizationId != credential-resolved; op not in allowed list |
-| IDEMPOTENCY_CONFLICT    | 409  | NEVER                  | Same idempotencyKey replayed with different payload digest |
+| IDEMPOTENCY_CONFLICT    | 409  | NEVER                  | Same idempotencyKey replayed with different payload digest, OR same idempotencyKey + same digest replayed with a rotated correlationId (internal `correlation_id_mismatch`) |
 | RATE_LIMITED            | 429  | BOUNDED_SAME_KEY       | Per-workflow budget exhausted                  |
 | DEPENDENCY_UNAVAILABLE  | 503  | BOUNDED_SAME_KEY       | Adapter offline; timeout; kill switch active   |
 | UNKNOWN_COMMAND_OUTCOME | 503  | RECONCILE_FIRST        | Malformed envelope beyond schema validation    |

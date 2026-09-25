@@ -83,15 +83,31 @@ hit-with-different-digest -> 409 `IDEMPOTENCY_CONFLICT`, internal
 Test: "idempotent replay vs conflicting payload".
 
 ### T-6: Retry that should dedupe (volatile tracking ids)
-**Threat:** n8n retries the same logical command with rotated
-`correlationId` / `n8nExecutionId` and we wrongly 409.
-**Mitigation:** `stripNonDigestFields` removes `correlationId`,
-`occurredAt`, `commandId`, and `n8nExecutionId` BEFORE digest.
-`commandId` is stripped because command-id allocation is allowed
-to vary per execution as long as it pairs with the SAME logical
-intent (correlationId is preserved for retry correlation).
 
-Test: "idempotent retry with new correlationId + new executionId".
+**Threat:** n8n retries the same logical command with rotated
+`commandId` / `n8nExecutionId` and we wrongly 409.
+
+**Mitigation (current — C-06 binding):**
+- `stripNonDigestFields` removes `correlationId`, `occurredAt`,
+  `commandId`, and `n8nExecutionId` BEFORE digest computation.
+  `commandId` is stripped because command-id allocation is
+  allowed to vary per execution as long as it pairs with the
+  SAME logical intent.
+- The idempotency record BINDS the **first-seen**
+  `correlationId` for a given `(scopeKey, idempotencyKey,
+  payloadDigest)` tuple. Same key + same digest + SAME
+  `correlationId` -> cached `APPLIED` (200). Same key + same
+  digest + DIFFERENT `correlationId` -> 409
+  `IDEMPOTENCY_CONFLICT` with internal
+  `correlation_id_mismatch`. Rationale: a rotated
+  `correlationId` means the caller is no longer the same
+  logical workflow run, so the gateway cannot silently
+  replay the cached execution.
+
+Tests: "idempotent retry with new correlationId + new
+executionId" (N8N/0.2) — updated to assert 409
+`correlation_id_mismatch`; "same key + same payload + same
+correlationId" (N8N/0.3) — asserts 200 APPLIED cached replay.
 
 ### T-7: Adapter offline
 **Threat:** downstream adapter (HRP, Chatwoot, Zalo, ...) is

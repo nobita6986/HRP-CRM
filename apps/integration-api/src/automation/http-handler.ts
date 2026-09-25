@@ -7,14 +7,16 @@
  * The handler does NOT duplicate gateway logic. It only:
  *   1. Applies route-level guards (route enabled, mock-mode guard, body-size
  *      pre-check, route allowlist).
- *   2. Reads headers to extract service identity:
- *        - X-Hrp-Automation-Service-Id
- *        - X-Hrp-Automation-Organization-Id
- *        - X-Hrp-Automation-Connection-Id
- *        - X-Hrp-Automation-Signature
- *   3. Reads raw body bytes and forwards to AutomationGateway.invoke().
- *   4. Maps the gateway's httpStatus/response to the HTTP envelope.
- *   5. Emits a redacted structured log entry.
+ *   2. Parses required credential headers (serviceId / organizationId /
+ *      connectionId / signature) BEFORE reading the body. This is a hard
+ *      boundary: an attacker cannot force us to buffer a payload by
+ *      omitting a header.
+ *   3. Reads raw body bytes with a deterministic bounded reader that
+ *      drains and discards any remainder rather than destroying the
+ *      socket. Oversized bodies return a deterministic 422 envelope.
+ *   4. Forwards to AutomationGateway.invoke().
+ *   5. Maps the gateway's httpStatus/response to the HTTP envelope.
+ *   6. Emits a redacted structured log entry.
  *
  * Trust boundaries:
  *   - body envelope: organizationId is a CLAIM only; gateway compares it
@@ -25,13 +27,15 @@
  *     secret + scopeKey + payload digest.
  *
  * Failure-closed semantics:
- *   - Missing headers           -> 401 AUTHENTICATION_REQUIRED (no leak)
+ *   - Missing headers           -> 401 AUTHENTICATION_REQUIRED (no leak,
+ *                                 and NO body buffering)
  *   - Unknown service           -> 401 AUTHENTICATION_REQUIRED (no leak)
  *   - Expired credential        -> 401 AUTHENTICATION_REQUIRED (no leak)
  *   - Signature mismatch        -> 401 AUTHENTICATION_REQUIRED (no leak)
  *   - Body org != credential    -> 403 FORBIDDEN
  *   - Operation not allowed     -> 403 FORBIDDEN
- *   - Payload > maxPayloadBytes -> 422 VALIDATION_ERROR (pre-check)
+ *   - Payload > maxPayloadBytes -> 422 VALIDATION_ERROR (Content-Length
+ *                                 pre-check OR bounded reader 422)
  *   - Schema invalid            -> 422 VALIDATION_ERROR
  *   - Idempotency conflict      -> 409 IDEMPOTENCY_CONFLICT
  *   - Rate limit exceeded       -> 429 RATE_LIMITED
@@ -82,7 +86,7 @@ export interface AutomationHttpHandlerDeps {
   mockMode?: 'deterministic' | 'off';
 }
 
-export const AUTOMATION_HTTP_HANDLER_VERSION = '0.1.0-n8n0.3';
+export const AUTOMATION_HTTP_HANDLER_VERSION = '0.2.0-n8n0.3';
 
 export class AutomationHttpHandler {
   private readonly registry: AutomationServiceRegistry;
@@ -134,6 +138,13 @@ export class AutomationHttpHandler {
    *
    * pathSegments: ['v1', 'automation', 'dispatch'] for the canonical
    * dispatch route; any other shape -> 404.
+   *
+   * Order of operations (intentional; N8N/0.3 r1):
+   *   (a) route enabled, (b) method is POST, (c) path matches,
+   *   (d) Content-Length pre-check, (e) HEADER PARSE, (f) body read.
+   *   Headers MUST be parsed BEFORE the body is read so that an
+   *   attacker cannot force us to buffer a payload by omitting the
+   *   auth headers.
    */
   async handle(
     req: IncomingMessage,
@@ -169,50 +180,89 @@ export class AutomationHttpHandler {
       });
     }
 
+    // Parse required credential headers BEFORE reading the body.
+    // A missing or malformed header returns 401 IMMEDIATELY without
+    // having read any body bytes (defense in depth against slowloris
+    // and against an attacker forcing a buffer allocation).
+    let headers: AutomationDispatchHeaders;
+    try {
+      headers = parseAndValidateHeaders(req);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // Drain any body bytes the client already sent so we can close
+      // cleanly without destroying the socket. We do not buffer the
+      // body; we just discard what is left.
+      discardRemainingBody(req).catch(() => {
+        /* best-effort drain; if it errors, we still sent the response */
+      });
+      return respondJson(res, 401, {
+        status: 'FAILED',
+        schemaVersion: '1.0.0',
+        commandId: 'cmd-unknown',
+        correlationId: 'corr-unknown',
+        errors: [
+          {
+            code: 'AUTHENTICATION_REQUIRED',
+            fieldPath: 'request',
+            messageKey: 'errors.authenticationRequired',
+            retryClass: 'REAUTHENTICATE',
+          },
+        ],
+        message: msg,
+      });
+    }
+
     // Pre-check Content-Length (defense in depth vs slowloris).
     const contentLength = req.headers['content-length'];
     if (contentLength) {
       const declared = Number.parseInt(contentLength, 10);
       if (Number.isFinite(declared) && declared > this.maxBodyBytes) {
+        discardRemainingBody(req).catch(() => {
+          /* best-effort drain; sized header told us what to expect */
+        });
         return respondJson(res, 422, {
           status: 'FAILED',
           schemaVersion: '1.0.0',
           commandId: 'cmd-unknown',
-            correlationId: 'corr-unknown',
-            errors: [
-              {
-                code: 'VALIDATION_ERROR',
-                fieldPath: 'request',
-                messageKey: 'errors.validation',
-                retryClass: 'NEVER',
-              },
-            ],
-            message: 'Content-Length vuot maxBodyBytes',
+          correlationId: 'corr-unknown',
+          errors: [
+            {
+              code: 'VALIDATION_ERROR',
+              fieldPath: 'request',
+              messageKey: 'errors.validation',
+              retryClass: 'NEVER',
+            },
+          ],
+          message: 'Content-Length vuot maxBodyBytes',
         });
       }
     }
 
-    // Read raw body, bounded.
+    // Read raw body, bounded; preserves the connection on oversize so
+    // the client can read a deterministic 422 JSON envelope.
     let rawBody: Uint8Array;
     try {
       rawBody = await readBoundedBody(req, this.maxBodyBytes);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg === 'PAYLOAD_TOO_LARGE') {
+      const code = err instanceof Error ? err.message : String(err);
+      if (code === 'PAYLOAD_TOO_LARGE') {
+        // Caller sent more than maxBodyBytes. We stopped accumulating,
+        // drained the remainder, and now return a deterministic
+        // envelope. No socket destroy: the connection still works.
         return respondJson(res, 422, {
           status: 'FAILED',
           schemaVersion: '1.0.0',
           commandId: 'cmd-unknown',
-            correlationId: 'corr-unknown',
-            errors: [
-              {
-                code: 'VALIDATION_ERROR',
-                fieldPath: 'request',
-                messageKey: 'errors.validation',
-                retryClass: 'NEVER',
-              },
-            ],
-            message: 'Body exceeds maxBodyBytes',
+          correlationId: 'corr-unknown',
+          errors: [
+            {
+              code: 'VALIDATION_ERROR',
+              fieldPath: 'request',
+              messageKey: 'errors.validation',
+              retryClass: 'NEVER',
+            },
+          ],
+          message: 'Body exceeds maxBodyBytes',
         });
       }
       throw err;
@@ -232,30 +282,6 @@ export class AutomationHttpHandler {
           },
         ],
         message: 'Body vuot maxBodyBytes',
-      });
-    }
-
-    // Parse headers. Fail closed if any required header is missing or
-    // malformed. NO body read happens until headers pass.
-    let headers: AutomationDispatchHeaders;
-    try {
-      headers = parseHeaders(req);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      return respondJson(res, 401, {
-        status: 'FAILED',
-        schemaVersion: '1.0.0',
-        commandId: 'cmd-unknown',
-        correlationId: 'corr-unknown',
-        errors: [
-          {
-            code: 'AUTHENTICATION_REQUIRED',
-            fieldPath: 'request',
-            messageKey: 'errors.authenticationRequired',
-            retryClass: 'REAUTHENTICATE',
-          },
-        ],
-        message: msg,
       });
     }
 
@@ -301,16 +327,16 @@ export class AutomationHttpHandler {
         status: 'FAILED',
         schemaVersion: '1.0.0',
         commandId: 'cmd-unknown',
-          correlationId: 'corr-unknown',
-          errors: [
-            {
-              code: 'UNKNOWN_COMMAND_OUTCOME',
-              fieldPath: 'request',
-              messageKey: 'errors.unknownCommandOutcome',
-              retryClass: 'RECONCILE_FIRST',
-            },
-          ],
-          message: 'Internal gateway failure',
+        correlationId: 'corr-unknown',
+        errors: [
+          {
+            code: 'UNKNOWN_COMMAND_OUTCOME',
+            fieldPath: 'request',
+            messageKey: 'errors.unknownCommandOutcome',
+            retryClass: 'RECONCILE_FIRST',
+          },
+        ],
+        message: 'Internal gateway failure',
       });
     }
 
@@ -343,7 +369,12 @@ export function buildAutomationHttpHandlerFromEnv(
   opts: AutomationHandlerEnvOpts,
   logSink?: (entry: RedactedLogEntry) => void,
 ): AutomationHttpHandler | null {
-  const entries = loadAutomationRegistryFromEnv(env);
+  let entries;
+  try {
+    entries = loadAutomationRegistryFromEnv(env);
+  } catch {
+    return null;
+  }
   if (entries.length === 0) return null;
   const registry = new AutomationServiceRegistry(entries);
   return new AutomationHttpHandler({
@@ -361,37 +392,97 @@ function respondJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-function readBoundedBody(req: IncomingMessage, maxBytes: number): Promise<Uint8Array> {
+/**
+ * Read the request body up to maxBytes, accumulating chunks. Once the
+ * running total exceeds maxBytes, this resolves with a Uint8Array
+ * containing the capped payload BUT keeps streaming the remainder so
+ * the client connection is not destroyed — that way the client can
+ * always receive the deterministic 422 envelope.
+ *
+ * Resolution contract:
+ *  - resolves with `raw` when the request ended under/at maxBytes.
+ *  - rejects with `Error('PAYLOAD_TOO_LARGE')` once the cap is hit AND
+ *    the incoming stream has been fully drained (or finished).
+ *  - rejects with any other error if the request errored.
+ *
+ * Implementation note (C-05): We do NOT call `req.destroy()` on
+ * oversize. We just stop buffering and consume-but-discard the
+ * remainder so the socket stays in a clean half-close state for the
+ * 422 response.
+ */
+function readBoundedBody(
+  req: IncomingMessage,
+  maxBytes: number,
+): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let total = 0;
-    req.on('data', (chunk: Buffer) => {
+    let oversize = false;
+
+    const finish = (): void => {
+      req.removeListener('data', onData);
+      req.removeListener('end', onEnd);
+      req.removeListener('error', onError);
+    };
+
+    const onData = (chunk: Buffer): void => {
       total += chunk.length;
       if (total > maxBytes) {
-        reject(new Error('PAYLOAD_TOO_LARGE'));
-        req.destroy();
+        if (!oversize) {
+          oversize = true;
+        }
+        // Discard the overage chunk; do NOT call req.destroy(). We keep
+        // consuming so the peer can finish its write and we can hand
+        // them back a clean 422 instead of a socket reset.
         return;
       }
       chunks.push(chunk);
-    });
-    req.on('end', () => resolve(new Uint8Array(Buffer.concat(chunks))));
-    req.on('error', reject);
+    };
+
+    const onEnd = (): void => {
+      finish();
+      if (oversize) {
+        reject(new Error('PAYLOAD_TOO_LARGE'));
+        return;
+      }
+      resolve(new Uint8Array(Buffer.concat(chunks)));
+    };
+
+    const onError = (err: Error): void => {
+      finish();
+      reject(err);
+    };
+
+    req.on('data', onData);
+    req.on('end', onEnd);
+    req.on('error', onError);
   });
 }
 
-function parseHeaders(req: IncomingMessage): AutomationDispatchHeaders {
+/**
+ * Validate all required credential headers. Throws on the FIRST one
+ * that is missing or malformed so the response message gives a useful
+ * (non-leaky) hint.
+ *
+ * Required headers (lowercase canonical names in node:http):
+ *   - x-hrp-automation-service-id      : non-empty string
+ *   - x-hrp-automation-organization-id : non-empty string
+ *   - x-hrp-automation-connection-id   : non-empty string
+ *   - x-hrp-automation-signature       : 64 lowercase/uppercase hex chars
+ */
+function parseAndValidateHeaders(req: IncomingMessage): AutomationDispatchHeaders {
   const get = (name: string): string | undefined => {
     const v = req.headers[name.toLowerCase()];
     if (Array.isArray(v)) return v[0];
     return v;
   };
   const serviceId = get('x-hrp-automation-service-id');
-  const organizationId = get('x-hrp-automation-organization-id');
-  const connectionId = get('x-hrp-automation-connection-id');
-  const signatureHex = get('x-hrp-automation-signature');
   if (!serviceId) throw new Error('thieu X-Hrp-Automation-Service-Id');
+  const organizationId = get('x-hrp-automation-organization-id');
   if (!organizationId) throw new Error('thieu X-Hrp-Automation-Organization-Id');
+  const connectionId = get('x-hrp-automation-connection-id');
   if (!connectionId) throw new Error('thieu X-Hrp-Automation-Connection-Id');
+  const signatureHex = get('x-hrp-automation-signature');
   if (!signatureHex) throw new Error('thieu X-Hrp-Automation-Signature');
   if (!/^[a-fA-F0-9]{64}$/.test(signatureHex)) {
     throw new Error('X-Hrp-Automation-Signature phai la hex SHA-256 (64 ky tu)');
@@ -402,6 +493,32 @@ function parseHeaders(req: IncomingMessage): AutomationDispatchHeaders {
     connectionId,
     signatureHex: signatureHex.toLowerCase(),
   };
+}
+
+/**
+ * Consume and discard any body bytes already buffered on the request.
+ * Used after a header rejection so the connection can close cleanly
+ * without an RST. Never rejects; errors are swallowed.
+ */
+function discardRemainingBody(req: IncomingMessage): Promise<void> {
+  return new Promise((resolve) => {
+    if (req.readableEnded || req.destroyed) {
+      resolve();
+      return;
+    }
+    const onEnd = (): void => {
+      req.removeListener('error', onErr);
+      resolve();
+    };
+    const onErr = (): void => {
+      req.removeListener('end', onEnd);
+      resolve();
+    };
+    req.on('end', onEnd);
+    req.on('error', onErr);
+    // Kick the stream in case data is already pending.
+    req.resume();
+  });
 }
 
 function buildFatalLogEntry(

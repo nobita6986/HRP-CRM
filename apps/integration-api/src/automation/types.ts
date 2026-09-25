@@ -391,6 +391,7 @@ export interface AutomationIdempotencyRecord {
   readonly scopeKey: string;
   readonly idempotencyKey: string;
   readonly payloadDigest: string;
+  readonly boundCorrelationId: string;
   readonly commandName: string;
   readonly organizationId: string;
   readonly connectionId: string;

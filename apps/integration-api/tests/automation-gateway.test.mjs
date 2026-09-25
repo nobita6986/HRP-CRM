@@ -8,7 +8,9 @@
  *   - operation allowlist (authorized vs unauthorized)
  *   - idempotency: replay returns cached result
  *   - idempotency: same key + different payload -> 409
- *   - idempotency: same key + same payload + different correlationId -> replay
+ *   - idempotency: same key + same payload + same correlationId -> replay
+ *   - idempotency: same key + same payload + different correlationId -> 409
+ *     (correlation_id_mismatch; n8nExecutionId may rotate without conflict)
  *   - payload size limit
  *   - rate limit per workflow
  *   - kill switch: workflow / connection / organization granularity
@@ -293,21 +295,48 @@ describe('idempotency', () => {
     assert.equal(r2.logEntry.idempotencyConflict, true);
   });
 
-  test('same key + same payload + different correlation/exec = replay', async () => {
+  test('same key + same payload + same correlationId -> 200 APPLIED (cached replay)', async () => {
     const { gateway } = makeGateway();
     const e1 = makeEnvelope('getNextAction', { nextActionId: 'na-001' });
     const r1 = await gateway.invoke(buildArgs(e1));
     assert.equal(r1.httpStatus, 200);
+    assert.equal(r1.logEntry.cacheHit, false);
 
-    // Re-run with rotated correlation/exec but same logical intent.
+    // Re-run with the SAME correlationId (logical retry). May rotate
+    // commandId and n8nExecutionId. Different commandId/n8nExecutionId
+    // do NOT contribute to the digest, so digest still matches.
+    const e2 = makeEnvelope('getNextAction', { nextActionId: 'na-001' });
+    e2.idempotencyKey = e1.idempotencyKey;
+    e2.correlationId = e1.correlationId;
+    e2.commandId = 'cmd-rotated-on-purpose';
+    e2.automationSource.n8nExecutionId = 'exec-rotated-on-purpose';
+    const r2 = await gateway.invoke(buildArgs(e2));
+    assert.equal(r2.httpStatus, 200);
+    assert.equal(r2.response.status, 'APPLIED');
+    assert.equal(r2.logEntry.cacheHit, true);
+  });
+
+  test('same key + same payload + different correlationId -> 409 IDEMPOTENCY_CONFLICT', async () => {
+    const { gateway } = makeGateway();
+    const e1 = makeEnvelope('getNextAction', { nextActionId: 'na-001' });
+    const r1 = await gateway.invoke(buildArgs(e1));
+    assert.equal(r1.httpStatus, 200);
+    assert.equal(r1.logEntry.cacheHit, false);
+
+    // Re-run with a rotated correlationId but same payload, same
+    // idempotencyKey. Per N8N/0.3 r1, correlationId MUST stay the same
+    // across the same logical flow; a different correlationId is treated
+    // as a different logical flow reusing the same key -> 409 conflict.
     const e2 = makeEnvelope('getNextAction', { nextActionId: 'na-001' });
     e2.idempotencyKey = e1.idempotencyKey;
     e2.commandId = e1.commandId;
     e2.correlationId = 'corr-totally-different-on-purpose';
     e2.automationSource.n8nExecutionId = 'exec-totally-different-on-purpose';
     const r2 = await gateway.invoke(buildArgs(e2));
-    assert.equal(r2.httpStatus, 200);
-    assert.equal(r2.logEntry.cacheHit, true);
+    assert.equal(r2.httpStatus, 409, JSON.stringify(r2.response));
+    assert.equal(r2.response.errors[0].code, 'IDEMPOTENCY_CONFLICT');
+    assert.equal(r2.internalCode, 'n8n_idempotency_conflict');
+    assert.equal(r2.logEntry.idempotencyConflict, true);
   });
 });
 

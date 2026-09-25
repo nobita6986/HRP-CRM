@@ -107,10 +107,20 @@ wire.
   from the registry entry that the credential authenticates against.
 - Body claim: envelope `organizationId` is checked against the
   registry-resolved org. Mismatch -> 403.
-- `correlationId` and `n8nExecutionId` are tracking IDs only; they do
-  NOT participate in the digest or idempotency key.
-- `commandId` is per-execution tracking; it does NOT participate in
-  the digest. It IS echoed in responses and logs.
+- `correlationId` is OUT of the business payload digest
+  (canonicalization excludes it). However, the idempotency
+  record BINDS the first-seen correlationId for a given
+  (idempotencyKey, payloadDigest) tuple. Replay with the
+  SAME correlationId returns the cached result (200 APPLIED);
+  a DIFFERENT correlationId with the same key + same digest
+  is rejected with 409 IDEMPOTENCY_CONFLICT
+  (`correlation_id_mismatch`) because the caller is no longer
+  the same logical flow.
+- `n8nExecutionId` is tracking-only; it does NOT participate in
+  the digest or the idempotency record. It may rotate freely.
+- `commandId` is per-execution tracking; it does NOT participate
+  in the digest. It IS echoed in responses and logs. It may
+  rotate freely.
 
 ## 4. Frozen surfaces (NOT modified by N8N/0.3)
 

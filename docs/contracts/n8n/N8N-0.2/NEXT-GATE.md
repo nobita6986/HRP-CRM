@@ -59,7 +59,34 @@
   the cache rebuilds from zero; n8n retries will temporarily
   re-execute (not a 409). Tracked as RISK-4.
 
-## 6. Open questions for T0 review
+## 6. C-06 (N8N/0.3 recheck) — correlationId binding policy
+
+The idempotency record binds the **first** correlationId seen for a
+given (idempotencyKey, payloadDigest) tuple. Subsequent calls with
+the SAME correlationId replay the cached result (200 APPLIED). A
+different correlationId with the same key + same payload digest is
+rejected as 409 IDEMPOTENCY_CONFLICT (`correlation_id_mismatch`)
+because the caller is no longer the same logical flow.
+
+| Component         | May rotate without conflict? |
+|-------------------|------------------------------|
+| `correlationId`   | NO — bound to the record     |
+| `commandId`       | YES — tracking-only          |
+| `n8nExecutionId`  | YES — tracking-only          |
+| payload bytes     | NO — digest is part of key   |
+
+Why: correlationId is the only signal n8n gives the gateway that
+"this retry belongs to the same logical workflow run." If it
+rotates, the gateway can no longer claim the retry is a true
+replay; treating it as cached execution would silently mask a
+genuinely different caller.
+
+The previously-phrased claim "rotated correlationId is a valid
+replay" is **removed**; the corresponding tests in
+`automation-gateway.test.mjs` and `automation-http-route.test.mjs`
+now assert `correlation_id_mismatch` -> 409 IDEMPOTENCY_CONFLICT.
+
+## 7. Open questions for T0 review
 
 - Q1: Confirm that `correlationId` MUST be preserved across retries
   while `commandId` may rotate. Plan §3.3 allows this; tests confirm.

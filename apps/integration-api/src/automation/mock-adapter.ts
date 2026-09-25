@@ -43,6 +43,9 @@ export interface MockAdapterOptions {
   /**
    * Server-trusted organization id the adapter is configured for. Any
    * call with a different organizationId returns DEPENDENCY_OFFLINE.
+   * Tests / runtime assembly may pass `skipOrgGate: true` to disable
+   * the org-mismatch check entirely (useful when the adapter is wired
+   * up without a per-org credential and we want to permit ANY org).
    */
   organizationId: string;
   connectionId: string;
@@ -56,6 +59,8 @@ export interface MockAdapterOptions {
    */
   initialGetById?: ReadonlyMap<string, DueNextActionItem>;
   now?: () => number;
+  /** Disable the org/connection-gating failure. Default: false. */
+  skipOrgGate?: boolean;
 }
 
 export interface AutomationAdapter {
@@ -82,6 +87,7 @@ export class MockAutomationAdapter implements AutomationAdapter {
   private readonly now: () => number;
   private readonly listDueItems: DueNextActionItem[];
   private readonly getById: Map<string, DueNextActionItem>;
+  private readonly skipOrgGate: boolean;
   private simulateOfflineUntil = 0;
   private nextCallTimesOut = false;
 
@@ -89,6 +95,7 @@ export class MockAutomationAdapter implements AutomationAdapter {
     this.orgId = opts.organizationId;
     this.connectionId = opts.connectionId;
     this.now = opts.now ?? (() => Date.now());
+    this.skipOrgGate = opts.skipOrgGate ?? false;
     this.listDueItems = opts.initialListDue
       ? opts.initialListDue.items.slice()
       : [];
@@ -129,7 +136,7 @@ export class MockAutomationAdapter implements AutomationAdapter {
   }
 
   private gate(organizationId: string): void {
-    if (organizationId !== this.orgId) {
+    if (!this.skipOrgGate && organizationId !== this.orgId) {
       throw new DependencyOfflineError(
         'adapter not configured for organizationId=' + organizationId,
       );

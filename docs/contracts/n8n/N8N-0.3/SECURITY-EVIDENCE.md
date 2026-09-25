@@ -16,8 +16,9 @@ Each test maps to a security control.
 | Body organizationId != credential               | org spoof / body spoofs org            | 403      |
 | Header organizationId != credential             | org spoof / header spoofs org          | 401      |
 | Operation not in registry allowlist             | op allowlist / outside allowlist       | 403      |
-| Same idemKey + same payload replayed             | idempotency / same key + same payload  | 200      |
-| Same idemKey + different payload                | idempotency / same key + diff payload  | 409      |
+| Same idemKey + same payload + same correlationId   | idempotency / replay                    | 200      |
+| Same idemKey + different payload                  | idempotency / payload_digest_mismatch   | 409      |
+| Same idemKey + same payload + different correlationId | idempotency / correlation_id_mismatch | 409      |
 | Content-Length > maxBodyBytes                   | payload size / CL over limit           | 422      |
 | Adapter offline                                 | provider offline                       | 503      |
 | Adapter timeout                                 | adapter timeout                        | 503      |

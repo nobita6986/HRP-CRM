@@ -11,10 +11,11 @@ node --test tests/automation-gateway.test.mjs
 No Docker. No DB. No HRP provider connection. Pure Node.js
 `node:test` runner.
 
-## 2. Test matrix (29 cases)
+## 2. Test matrix (30 cases)
 
 Each row is a unit test. The "Status" column reflects the
-2026-09-25 run captured at `tests/evidence/automation-gateway.test.stdout.txt`.
+2026-09-25 run captured at `tests/evidence/automation-gateway.test.stdout.txt`
+and re-confirmed in the N8N/0.3 C-06 recheck.
 
 | #   | Test name                                                            | AC ref | Expected wire code         | Status |
 |-----|----------------------------------------------------------------------|--------|----------------------------|--------|
@@ -27,26 +28,37 @@ Each row is a unit test. The "Status" column reflects the
 | 07  | credential expired -> 401                                            | §3.2   | AUTHENTICATION_REQUIRED    | pass   |
 | 08  | operation not allowed -> 403                                          | §3.2   | FORBIDDEN                  | pass   |
 | 09  | idempotent replay returns cached result                              | §3.3   | APPLIED (same data)        | pass   |
-| 10  | idempotent replay vs conflicting payload -> 409                      | §3.3   | IDEMPOTENCY_CONFLICT       | pass   |
-| 11  | idempotent retry with new correlationId + new executionId dedupes    | §3.3   | APPLIED (cached)           | pass   |
-| 12  | payload too large -> 422                                             | §3.2   | VALIDATION_ERROR           | pass   |
-| 13  | rate limited -> 429                                                  | §3.2   | RATE_LIMITED               | pass   |
-| 14  | adapter offline -> 503                                               | §3.2   | DEPENDENCY_UNAVAILABLE     | pass   |
-| 15  | adapter timeout -> 503                                               | §3.2   | DEPENDENCY_UNAVAILABLE     | pass   |
-| 16  | kill switch (org) -> 503                                             | §3.3   | DEPENDENCY_UNAVAILABLE     | pass   |
-| 17  | kill switch (workflow+org beats workflow)                            | §3.3   | (specificity ordering)     | pass   |
-| 18  | kill switch (workflow+conn+org beats workflow+org)                   | §3.3   | (specificity ordering)     | pass   |
-| 19  | kill switch (connection+org beats organization)                      | §3.3   | (specificity ordering)     | pass   |
-| 20  | kill switch (org override beats default)                             | §3.3   | (specificity ordering)     | pass   |
-| 21  | redacted envelope keeps secret out                                   | §3.4   | (no secret literal)        | pass   |
-| 22  | response data shape is strict + versioned                            | §3.4   | APPLIED w/ schemaVersion 1 | pass   |
-| 23  | commandName vs operation.op mismatch -> 422                          | §3.2   | VALIDATION_ERROR           | pass   |
-| 24  | future schemaVersion rejected -> 422                                 | §3.2   | VALIDATION_ERROR           | pass   |
-| 25  | unknown operation rejected -> 422                                   | §3.2   | VALIDATION_ERROR           | pass   |
-| 26  | frozen CommandError wire code uses frozen policy                     | §3.4   | (no internal code leaks)   | pass   |
-| 27  | registry resolves credential with strict allowlist                   | §3.2   | (registry contract)        | pass   |
-| 28  | rate limit does not consume tokens on validation failure             | §3.2   | (budget isolation)         | pass   |
-| 29  | operation allowlist (additional op succeeds when allowed)            | §3.2   | APPLIED (200)              | pass   |
+| 10  | idempotent replay vs conflicting payload -> 409                      | §3.3   | IDEMPOTENCY_CONFLICT (payload_digest_mismatch) | pass |
+| 11  | idempotent retry with new commandId + new n8nExecutionId dedupes     | §3.3   | APPLIED (cached, same correlationId) | pass |
+| 12  | idempotent retry with rotated correlationId -> 409                   | §3.3   | IDEMPOTENCY_CONFLICT (correlation_id_mismatch) | pass |
+| 13  | payload too large -> 422                                             | §3.2   | VALIDATION_ERROR           | pass   |
+| 14  | rate limited -> 429                                                  | §3.2   | RATE_LIMITED               | pass   |
+| 15  | adapter offline -> 503                                               | §3.2   | DEPENDENCY_UNAVAILABLE     | pass   |
+| 16  | adapter timeout -> 503                                               | §3.2   | DEPENDENCY_UNAVAILABLE     | pass   |
+| 17  | kill switch (org) -> 503                                             | §3.3   | DEPENDENCY_UNAVAILABLE     | pass   |
+| 18  | kill switch (workflow+org beats workflow)                            | §3.3   | (specificity ordering)     | pass   |
+| 19  | kill switch (workflow+conn+org beats workflow+org)                   | §3.3   | (specificity ordering)     | pass   |
+| 20  | kill switch (connection+org beats organization)                      | §3.3   | (specificity ordering)     | pass   |
+| 21  | kill switch (org override beats default)                             | §3.3   | (specificity ordering)     | pass   |
+| 22  | redacted envelope keeps secret out                                   | §3.4   | (no secret literal)        | pass   |
+| 23  | response data shape is strict + versioned                            | §3.4   | APPLIED w/ schemaVersion 1 | pass   |
+| 24  | commandName vs operation.op mismatch -> 422                          | §3.2   | VALIDATION_ERROR           | pass   |
+| 25  | future schemaVersion rejected -> 422                                 | §3.2   | VALIDATION_ERROR           | pass   |
+| 26  | unknown operation rejected -> 422                                   | §3.2   | VALIDATION_ERROR           | pass   |
+| 27  | frozen CommandError wire code uses frozen policy                     | §3.4   | (no internal code leaks)   | pass   |
+| 28  | registry resolves credential with strict allowlist                   | §3.2   | (registry contract)        | pass   |
+| 29  | rate limit does not consume tokens on validation failure             | §3.2   | (budget isolation)         | pass   |
+| 30  | operation allowlist (additional op succeeds when allowed)            | §3.2   | APPLIED (200)              | pass   |
+
+C-06 (N8N/0.3 recheck): row 11 was previously phrased as
+"idempotent retry with new correlationId + new executionId dedupes
+-> APPLIED (cached)". That phrasing contradicted the new
+correlationId-binding policy. The test was rewritten to assert
+that rotating `commandId` and `n8nExecutionId` while KEEPING
+`correlationId` still dedupes (cached APPLIED). The mirror case
+(rotated `correlationId`) is now row 12 and asserts 409
+`IDEMPOTENCY_CONFLICT` with internal
+`correlation_id_mismatch`.
 
 ## 3. Raw captured output
 
@@ -59,9 +71,9 @@ TAP version 13
 # Subtest: listDueNextActions happy path
 ok 1 - listDueNextActions happy path
 ...
-ok 29 - operation allowlist (additional op succeeds when allowed)
-# tests 29
-# pass 29
+ok 30 - operation allowlist (additional op succeeds when allowed)
+# tests 30
+# pass 30
 # fail 0
 # cancelled 0
 # skipped 0
@@ -74,6 +86,7 @@ suitable for T0 review.
 
 ## 4. Boundary classifications
 
-- `EXECUTED_VERIFIED`: tests 01..29 all green.
-- `NOT_VERIFIED`: HTTP boundary (N8N/0.3).
+- `EXECUTED_VERIFIED`: tests 01..30 all green.
+- `NOT_VERIFIED`: HTTP boundary (N8N/0.3 owns the HTTP route test
+  matrix; see `docs/contracts/n8n/N8N-0.3/TEST-EVIDENCE.md`).
 - `NOT_AVAILABLE`: integration with real n8n instance.

@@ -51,7 +51,7 @@ registry-resolved values.
 
 ## Test status (in this worktree)
 
-- N8N/0.2: 29/29 PASS
-- N8N/0.3 HTTP: 20/20 PASS
-- Combined: 49/49 PASS
+- N8N/0.2: 30/30 PASS (N8N/0.2 suite grew by 1 C-06 case)
+- N8N/0.3 HTTP: 34/34 PASS (N8N/0.3 suite grew by 14 C-02..C-06 cases)
+- Combined: 64/64 PASS
 - typecheck/build: clean

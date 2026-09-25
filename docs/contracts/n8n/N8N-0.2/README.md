@@ -45,7 +45,9 @@ npx tsc --noEmit
 node --test tests/automation-gateway.test.mjs
 ```
 
-Expected: **29 tests pass, 0 fail, ~5s runtime**.
+Expected: **30 tests pass, 0 fail, ~5s runtime** (29 from
+the initial N8N/0.2 delivery + 1 C-06 correlationId-binding
+case added in the N8N/0.3 recheck).
 
 ## Boundary classifications used in this bundle
 

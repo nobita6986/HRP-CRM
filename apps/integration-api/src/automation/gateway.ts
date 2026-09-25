@@ -9,9 +9,11 @@
  *   5. Operation allowlist (entry.allowedOperations + global allowlist).
  *   6. Rate limit (per workflow).
  *   7. Kill switch check (per workflow/connection/org).
- *   8. Idempotency lookup (digest match).
- *      - hit + same digest -> replay cached result
- *      - hit + diff digest -> IDEMPOTENCY_CONFLICT (409)
+ *   8. Idempotency lookup (digest + bound correlationId match).
+ *      - hit + same digest + same bound correlationId -> replay cached result
+ *      - hit + diff digest -> IDEMPOTENCY_CONFLICT (409, payload_digest_mismatch)
+ *      - hit + same digest + diff correlationId -> IDEMPOTENCY_CONFLICT
+ *        (409, correlation_id_mismatch)
  *      - miss -> continue
  *   9. Adapter call (with timeout).
  *  10. Build wire response, record idempotency, return.
@@ -242,11 +244,14 @@ export class AutomationGateway {
       commandName: envelope.commandName,
       idempotencyKey: envelope.idempotencyKey,
     });
-    // Per Plan §3.3 + N8N/0.2 AC: correlationId, n8nExecutionId,
-    // commandId, and occurredAt are per-execution tracking ids, NOT
-    // part of the idempotency payload digest. The digest is over the
-    // envelope with these fields stripped so retry flows across exec
-    // ids and rotated correlation ids dedupe correctly.
+    // Per N8N/0.3 r1: correlationId, n8nExecutionId, commandId, and
+    // occurredAt are per-execution tracking ids, NOT part of the
+    // idempotency payload digest. The digest is over the envelope
+    // with these fields stripped so retry flows within the SAME
+    // logical command dedupe correctly. The same envelope (same
+    // digest) under a DIFFERENT correlationId is treated as a
+    // separate logical flow and 409s as IDEMPOTENCY_CONFLICT
+    // (correlation_id_mismatch); see AutomationIdempotencyStore.
     const envelopeForDigest = stripNonDigestFields(envelope);
     const payloadDigest = payloadDigestHex(canonicalJson(envelopeForDigest));
     const signingInput = scopeKey + '\n' + payloadDigest;
@@ -351,7 +356,11 @@ export class AutomationGateway {
       );
     }
 
-    const idem = this.idempotency.lookup({ scopeKey, payloadDigest });
+    const idem = this.idempotency.lookup({
+      scopeKey,
+      payloadDigest,
+      correlationId: envelope.correlationId,
+    });
     if (idem.hit && idem.cacheHit && idem.record) {
       const cached = idem.record.result;
       const httpStatus =
@@ -449,6 +458,7 @@ export class AutomationGateway {
       scopeKey,
       idempotencyKey: envelope.idempotencyKey,
       payloadDigest,
+      boundCorrelationId: envelope.correlationId,
       commandName: envelope.commandName,
       organizationId: envelope.organizationId,
       connectionId: resolvedConnectionId,

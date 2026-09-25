@@ -75,7 +75,17 @@ import { Ac3HttpHandler } from './outbox/ac3-handler.js';
 import {
   AutomationHttpHandler,
   type AutomationHttpHandlerDeps,
+  buildAutomationHttpHandlerFromEnv,
+  AUTOMATION_HTTP_HANDLER_VERSION,
 } from './automation/http-handler.js';
+import {
+  AutomationServiceRegistry,
+  loadAutomationRegistryFromEnv,
+} from './automation/connection-registry.js';
+import { KillSwitchStore } from './automation/kill-switch.js';
+import { TokenBucketRateLimiter } from './automation/rate-limiter.js';
+import { AutomationIdempotencyStore } from './automation/idempotency-store.js';
+import { MockAutomationAdapter } from './automation/mock-adapter.js';
 
 const VERSION = '1.2.0-core1.8+n8n0.3';
 
@@ -242,11 +252,17 @@ export async function startServer(
     : null;
 
   // N8N/0.3 — automation gateway HTTP route.
-  // The handler is constructed only when opts.automationHandler is
-  // provided; default runtime keeps the route DISABLED. The handler
-  // itself refuses to mount when the registry is unconfigured. Tests
-  // inject a pre-built handler with synthetic credentials.
-  const automationHandler = opts?.automationHandler ?? null;
+  //
+  // Local runtime assembly (C-02): when the caller has NOT injected a
+  // pre-built handler (test path), AND nodeEnv != 'production' AND
+  // HRP_MOCK_MODE is 'deterministic' AND HRP_AUTOMATION_SERVICES (or
+  // any HRP_AUTOMATION_SERVICE_<N>) is configured with at least one
+  // NON-EXPIRED entry, server-side automatically assembles a handler
+  // from env. Production / off mode / empty / malformed / expired
+  // env keeps the route unmounted (fail closed). Pre-built handler
+  // injection continues to work for tests.
+  const automationHandler =
+    opts?.automationHandler ?? assembleAutomationHandlerFromEnv(env, config);
 
   const server = createServer((req, res) => {
     void handleRequest(
@@ -624,3 +640,87 @@ if (isDirectRun) {
 }
 
 export { VERSION };
+
+/* -------------------------------------------------------------------------- */
+/* N8N/0.3 — runtime automation handler assembly                               */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Try to assemble an AutomationHttpHandler from env. Returns null when
+ * the local-runtime guard is not satisfied, when the env is malformed,
+ * when the registry is empty, or when every entry is already expired.
+ *
+ * Local-runtime guard (C-02):
+ *   - nodeEnv != 'production'
+ *   - HRP_MOCK_MODE === 'deterministic'
+ *   - registry has at least one non-expired entry after the env load
+ *
+ * Test injection path (startServer({ automationHandler })) is
+ * unchanged: when present, the caller-supplied handler is used
+ * verbatim.
+ */
+function assembleAutomationHandlerFromEnv(
+  env: Record<string, string | undefined>,
+  config: ApiConfig,
+): AutomationHttpHandler | null {
+  if (config.nodeEnv === 'production') return null;
+  if (config.mockMode !== 'deterministic') return null;
+
+  try {
+    const entries = loadAutomationRegistryFromEnv(env);
+    if (entries.length === 0) return null;
+    // Trim entries that are already expired; only mount if at least
+    // one is still valid.
+    const now = Date.now();
+    const valid = entries.filter((e) => e.expiresAt > now);
+    if (valid.length === 0) return null;
+    const registry = new AutomationServiceRegistry(valid);
+    if (!registry.isConfigured()) return null;
+    const deps = buildDefaultGatewayDeps();
+    void AUTOMATION_HTTP_HANDLER_VERSION; // surface for log readers
+    return new AutomationHttpHandler({
+      registry,
+      gatewayDeps: deps,
+      maxBodyBytes: 64 * 1024,
+      mockMode: 'deterministic',
+    });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Build the default in-memory deps the local runtime uses for the
+ * automation gateway. These are the same defaults tests use
+ * (deterministic, in-memory; no DB; no Docker). Production NEVER
+ * reaches this builder (see the production guard above).
+ */
+function buildDefaultGatewayDeps(): Omit<
+  import('./automation/gateway.js').AutomationGatewayDeps,
+  'registry'
+> {
+  // The runtime mock adapter seeds default fixtures keyed off a
+  // synthetic org/conn. Real org/conn comes from the credential
+  // registry on every invoke(); the adapter just needs *some*
+  // baseline at construction.
+  const baseOrg = 'org-runtime-default';
+  const baseConn = 'conn-runtime-default';
+  return {
+    killSwitch: new KillSwitchStore(),
+    rateLimiter: new TokenBucketRateLimiter({ capacity: 60, perMinute: 60 }),
+    idempotency: new AutomationIdempotencyStore(),
+    adapter: new MockAutomationAdapter({
+      organizationId: baseOrg,
+      connectionId: baseConn,
+      now: () => Date.now(),
+      initialGetById: new Map(),
+      initialListDue: { items: [] },
+      // Runtime defaults accept ANY credential-resolved org/conn; the
+      // credential registry remains the authoritative source, and the
+      // adapter's per-org gating is for tests that intentionally
+      // scope fixtures.
+      skipOrgGate: true,
+    }),
+  };
+}
+
