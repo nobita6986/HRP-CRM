@@ -68,3 +68,13 @@ export type { AutomationGatewayDeps, GatewayInvokeArgs, GatewayInvokeResult, Red
 export { redactJson, redactString, stripClaims } from './redact.js';
 
 export { ValidationError, DependencyOfflineError, TimeoutError, GatewayInternalError } from './errors.js';
+
+export {
+  AutomationHttpHandler,
+  AUTOMATION_HTTP_HANDLER_VERSION,
+  buildAutomationHttpHandlerFromEnv,
+} from './http-handler.js';
+export type {
+  AutomationHttpHandlerDeps,
+  AutomationDispatchHeaders,
+} from './http-handler.js';

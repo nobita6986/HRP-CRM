@@ -72,8 +72,12 @@ import { ReconciliationHttpHandler } from './reconciler/http-handler.js';
 import { DlqHttpHandler } from './dlq/http-handler.js';
 import { DlqService } from './dlq/index.js';
 import { Ac3HttpHandler } from './outbox/ac3-handler.js';
+import {
+  AutomationHttpHandler,
+  type AutomationHttpHandlerDeps,
+} from './automation/http-handler.js';
 
-const VERSION = '1.2.0-core1.8';
+const VERSION = '1.2.0-core1.8+n8n0.3';
 
 /**
  * Singleton gateway instance per process — cho HTTP runtime.
@@ -159,6 +163,7 @@ export async function startServer(
     unknownDeliveryHandler?: UnknownDeliveryHandler;
     outboxHandler?: OutboxHttpHandler;
     dlqService?: DlqService;
+    automationHandler?: AutomationHttpHandler;
   },
 ): Promise<ReturnType<typeof createServer>> {
   const { listen, mockRoutes, receiver } = config;
@@ -236,6 +241,13 @@ export async function startServer(
       })
     : null;
 
+  // N8N/0.3 — automation gateway HTTP route.
+  // The handler is constructed only when opts.automationHandler is
+  // provided; default runtime keeps the route DISABLED. The handler
+  // itself refuses to mount when the registry is unconfigured. Tests
+  // inject a pre-built handler with synthetic credentials.
+  const automationHandler = opts?.automationHandler ?? null;
+
   const server = createServer((req, res) => {
     void handleRequest(
       req,
@@ -249,6 +261,7 @@ export async function startServer(
       reconcilerHandler,
       dlqHandler,
       ac3Handler,
+      automationHandler,
     );
   });
   await new Promise<void>((resolve, reject) => {
@@ -271,6 +284,7 @@ async function handleRequest(
   reconcilerHandler: ReconciliationHttpHandler | null,
   dlqHandler: DlqHttpHandler | null,
   ac3Handler: Ac3HttpHandler | null,
+  automationHandler: AutomationHttpHandler | null,
 ): Promise<void> {
   const url = req.url ?? '/';
   const path: string = url.split('?')[0] ?? '/';
@@ -480,6 +494,22 @@ async function handleRequest(
       });
     }
     return reconcilerHandler.handle(req, res);
+  }
+
+  // N8N/0.3 — /v1/automation/* automation gateway HTTP route.
+  // The handler itself enforces: route enabled, registry configured,
+  // mockMode not off. It returns 404 when disabled so the route is
+  // never observable in production unless explicitly mounted.
+  if (segments[0] === 'v1' && segments[1] === 'automation') {
+    if (!automationHandler) {
+      return respondJson(res, 404, {
+        error: 'route_not_mounted',
+        path,
+        message:
+          '/v1/automation/* chưa được mount. N8N/0.3 boundary chỉ enable khi automationHandler được inject.',
+      });
+    }
+    return automationHandler.handle(req, res, segments);
   }
 
   return respondJson(res, 404, {
