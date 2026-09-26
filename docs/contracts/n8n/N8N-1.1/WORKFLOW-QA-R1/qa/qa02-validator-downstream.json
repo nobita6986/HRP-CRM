@@ -1,0 +1,11 @@
+{
+  "validatorDownstream": [
+    "Validate CRM AutomationRequest Shape",
+    "Mock CRM Gateway ΓÇö acknowledgeReminder",
+    "Merge Results",
+    "Build Final Output"
+  ],
+  "reachesMockAck": true,
+  "reachesMockSend": false,
+  "reachesMockAckCount": 1
+}

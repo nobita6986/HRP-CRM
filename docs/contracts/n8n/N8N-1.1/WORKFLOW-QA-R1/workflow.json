@@ -1,0 +1,996 @@
+{
+  "name": "CRM — SLA Reminder — N8N/1.1 — Draft",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "bbc87750-0573-4676-9613-3821f51b9e7b",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "notes": "Manual MOCK entry point for the test execution. The workflow is left unpublished."
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "mode",
+              "name": "mode",
+              "value": "MOCK",
+              "type": "string"
+            },
+            {
+              "id": "referenceNow",
+              "name": "referenceNow",
+              "value": "2026-09-26T09:00:00.000Z",
+              "type": "string"
+            },
+            {
+              "id": "dayKey",
+              "name": "dayKey",
+              "value": "20260926",
+              "type": "string"
+            },
+            {
+              "id": "workflowRevision",
+              "name": "workflowRevision",
+              "value": 3,
+              "type": "number"
+            },
+            {
+              "id": "organizationId",
+              "name": "organizationId",
+              "value": "org-synthetic-crm",
+              "type": "string"
+            },
+            {
+              "id": "serviceId",
+              "name": "serviceId",
+              "value": "svc-n8n-crm-synthetic",
+              "type": "string"
+            },
+            {
+              "id": "connectionId",
+              "name": "connectionId",
+              "value": "conn-n8n-crm-synthetic",
+              "type": "string"
+            },
+            {
+              "id": "correlationId",
+              "name": "correlationId",
+              "value": "corr-n8n11-synthetic-001",
+              "type": "string"
+            },
+            {
+              "id": "sourceKind",
+              "name": "sourceKind",
+              "value": "HRP_UI",
+              "type": "string"
+            },
+            {
+              "id": "sourceProvider",
+              "name": "sourceProvider",
+              "value": "HRP_UI",
+              "type": "string"
+            },
+            {
+              "id": "actorKind",
+              "name": "actorKind",
+              "value": "SERVICE",
+              "type": "string"
+            },
+            {
+              "id": "automationWorkflowId",
+              "name": "automationWorkflowId",
+              "value": "crm-sla-reminder-n8n11-draft",
+              "type": "string"
+            },
+            {
+              "id": "n8nExecutionId",
+              "name": "n8nExecutionId",
+              "value": "exec-synthetic-001",
+              "type": "string"
+            },
+            {
+              "id": "sourceEventId",
+              "name": "sourceEventId",
+              "value": "manual-synthetic",
+              "type": "string"
+            },
+            {
+              "id": "workflowLabel",
+              "name": "workflowLabel",
+              "value": "sla-reminder-crm",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f5985414-3471-4b39-8bfd-108158a12132",
+      "name": "Test Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        832,
+        272
+      ],
+      "notes": "Static MOCK constants, including the fixed AutomationRequest envelope values. No Date.now(), no randomness, no environment reads."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Seven independent synthetic NextAction records. No external system is read.\nconst records = [\n  { nextActionId: 'na-001', status: 'OPEN', snoozeMode: 'ACTIVE', dueAt: '2026-09-26T09:30:00.000Z', assignedToRedacted: 'owner-A', supervisorRedacted: 'supervisor-A' },\n  { nextActionId: 'na-002', status: 'OPEN', snoozeMode: 'ACTIVE', dueAt: '2026-09-26T08:30:00.000Z', assignedToRedacted: 'owner-B', supervisorRedacted: 'supervisor-B' },\n  { nextActionId: 'na-003', status: 'OPEN', snoozeMode: 'SNOOZED', dueAt: '2026-09-26T09:15:00.000Z', assignedToRedacted: 'owner-C', supervisorRedacted: 'supervisor-C' },\n  { nextActionId: 'na-004', status: 'CLOSED', snoozeMode: 'ACTIVE', dueAt: '2026-09-26T08:00:00.000Z', assignedToRedacted: 'owner-D', supervisorRedacted: 'supervisor-D' },\n  { nextActionId: 'na-005', status: 'OPEN', snoozeMode: 'ACTIVE', dueAt: '2026-09-26T07:30:00.000Z', assignedToRedacted: null, supervisorRedacted: null },\n  { nextActionId: 'na-006', status: 'OPEN', snoozeMode: 'ACTIVE', dueAt: '2026-09-26T09:45:00.000Z', assignedToRedacted: 'owner-A', supervisorRedacted: 'supervisor-A' },\n  { nextActionId: 'na-007', status: 'OPEN', snoozeMode: 'ACTIVE', dueAt: '2026-09-26T12:30:00.000Z', assignedToRedacted: 'owner-E', supervisorRedacted: 'supervisor-E' }\n];\nreturn records.map(function (record) { return { json: record }; });"
+      },
+      "id": "528418b7-d769-489c-a7e5-b44d4df257ba",
+      "name": "Synthetic NextActions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1056,
+        272
+      ],
+      "notes": "Fixed synthetic records only. Nothing is fetched from any CRM, HRP, Chatwoot or Zalo system."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "hasNextActionId",
+              "leftValue": "={{ $json.nextActionId }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            },
+            {
+              "id": "hasStatus",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            },
+            {
+              "id": "hasDueAt",
+              "leftValue": "={{ $json.dueAt }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fe810c9f-d5ab-49d1-8c3f-9145f0bf124b",
+      "name": "Reject Malformed Records",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        1280,
+        272
+      ],
+      "notes": "Rejects any record without nextActionId, status or dueAt. Its Discarded output stays unwired: the synthetic set contains no malformed record."
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "dueInMinutes",
+              "name": "dueInMinutes",
+              "value": "={{ Math.round((Date.parse($json.dueAt) - Date.parse($(\"Test Config\").first().json.referenceNow)) / 60000) }}",
+              "type": "number"
+            },
+            {
+              "id": "dueClassification",
+              "name": "dueClassification",
+              "value": "={{ (Date.parse($json.dueAt) <= Date.parse($(\"Test Config\").first().json.referenceNow)) ? \"OVERDUE\" : (((Date.parse($json.dueAt) - Date.parse($(\"Test Config\").first().json.referenceNow)) <= 3600000) ? \"DUE_SOON\" : \"NOT_DUE\") }}",
+              "type": "string"
+            },
+            {
+              "id": "exclusionReason",
+              "name": "exclusionReason",
+              "value": "={{ ($json.status !== \"OPEN\") ? \"NOT_OPEN\" : (($json.snoozeMode === \"SNOOZED\") ? \"SNOOZED\" : (((Date.parse($json.dueAt) - Date.parse($(\"Test Config\").first().json.referenceNow)) > 3600000) ? \"NOT_DUE\" : \"\")) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "566a68a0-3e4d-46e4-ac78-ca56197f26f6",
+      "name": "Compute Due Window",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1504,
+        272
+      ],
+      "notes": "Due time is measured against the static referenceNow of Test Config. Classifies OVERDUE / DUE_SOON / NOT_DUE and records why a record is excluded."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "notClosed",
+              "leftValue": "={{ $json.exclusionReason }}",
+              "rightValue": "NOT_OPEN",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "63426873-6399-4a95-ae63-0ece7c1855d1",
+      "name": "Drop Non-Open",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        800,
+        -176
+      ],
+      "notes": "Drops records whose status is not OPEN. Dropped records keep the exclusionReason NOT_OPEN."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "notSnoozed",
+              "leftValue": "={{ $json.exclusionReason }}",
+              "rightValue": "SNOOZED",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5647873e-3e57-47ad-a919-24bb3116a722",
+      "name": "Drop Snoozed",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        1024,
+        -176
+      ],
+      "notes": "Drops records with snoozeMode SNOOZED. Dropped records keep the exclusionReason SNOOZED."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "notOutsideWindow",
+              "leftValue": "={{ $json.exclusionReason }}",
+              "rightValue": "NOT_DUE",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "54179fa3-6eb9-46d6-96a8-3371bb71bf38",
+      "name": "Drop Not Due",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        1248,
+        -176
+      ],
+      "notes": "Drops records outside the due-soon window. Dropped records keep the exclusionReason NOT_DUE."
+    },
+    {
+      "parameters": {
+        "sortFieldsUi": {
+          "sortField": [
+            {
+              "fieldName": "dueAt"
+            },
+            {
+              "fieldName": "nextActionId"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4237c471-d2a6-47df-ba1b-c2367ac57261",
+      "name": "Sort Deterministically",
+      "type": "n8n-nodes-base.sort",
+      "typeVersion": 1,
+      "position": [
+        1472,
+        -176
+      ],
+      "notes": "Deterministic order: dueAt ascending, then nextActionId ascending."
+    },
+    {
+      "parameters": {
+        "compare": "selectedFields",
+        "fieldsToCompare": "nextActionId",
+        "options": {
+          "disableDotNotation": false,
+          "removeOtherFields": false
+        }
+      },
+      "id": "0e28105a-e627-4334-b780-422ab1bbd6b8",
+      "name": "Keep One Item Per NextAction",
+      "type": "n8n-nodes-base.removeDuplicates",
+      "typeVersion": 2,
+      "position": [
+        1696,
+        -176
+      ],
+      "notes": "Guarantees one item per nextActionId. Reminders are never grouped across NextActions."
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "audience",
+              "name": "audience",
+              "value": "={{ ($json.dueClassification === \"OVERDUE\" && $json.supervisorRedacted) ? \"SUPERVISOR\" : ($json.assignedToRedacted ? \"OWNER\" : \"NONE\") }}",
+              "type": "string"
+            },
+            {
+              "id": "recipientRedacted",
+              "name": "recipientRedacted",
+              "value": "={{ ($json.dueClassification === \"OVERDUE\" && $json.supervisorRedacted) ? $json.supervisorRedacted : ($json.assignedToRedacted ? $json.assignedToRedacted : \"\") }}",
+              "type": "string"
+            },
+            {
+              "id": "routing",
+              "name": "routing",
+              "value": "={{ (($json.dueClassification === \"OVERDUE\" && $json.supervisorRedacted) || $json.assignedToRedacted) ? \"SEND\" : \"FALLBACK\" }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "f9552b3a-25e9-41cb-8173-dfbcc1f125ba",
+      "name": "Resolve Audience and Routing",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1920,
+        -176
+      ],
+      "notes": "OVERDUE with a supervisor goes to SUPERVISOR, otherwise the owner. With neither an owner nor an applicable supervisor the record falls back and has no recipient."
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "isSend",
+                    "leftValue": "={{ $json.routing }}",
+                    "rightValue": "SEND",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "SEND"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "isFallback",
+                    "leftValue": "={{ $json.routing }}",
+                    "rightValue": "FALLBACK",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "FALLBACK"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "af04aa73-0f25-4843-8ddf-7685653f6149",
+      "name": "Route SEND or FALLBACK",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        2208,
+        -144
+      ],
+      "notes": "Each eligible record enters exactly one branch: routing is either SEND or FALLBACK."
+    },
+    {
+      "parameters": {
+        "jsCode": "// One deterministic envelope per eligible SEND item. No Date.now(), no execution id, no randomness.\nconst config = $('Test Config').first().json;\nreturn $input.all().map(function (item) {\n  const record = item.json;\n  const audience = record.audience;\n  const idempotencyKey = 'rem-' + config.dayKey + '-' + record.nextActionId + '-' + audience + '-r' + config.workflowRevision;\n  const reminderRevisionId = 'rev-' + config.dayKey + '-' + record.nextActionId + '-' + audience + '-r' + config.workflowRevision;\n  const commandId = 'cmd-' + idempotencyKey;\n  const envelope = {\n    schemaVersion: '1',\n    commandId: commandId,\n    commandName: 'sendSyntheticReminder',\n    idempotencyKey: idempotencyKey,\n    correlationId: config.correlationId,\n    organizationId: config.organizationId,\n    source: { kind: config.sourceKind, provider: config.sourceProvider, connectionId: null },\n    actor: { kind: config.actorKind, serviceId: config.serviceId },\n    occurredAt: config.referenceNow,\n    automationSource: {\n      kind: 'N8N_AUTOMATION',\n      workflowId: config.automationWorkflowId,\n      workflowRevision: config.workflowRevision,\n      n8nExecutionId: config.n8nExecutionId,\n      sourceEventId: config.sourceEventId,\n      workflowLabel: config.workflowLabel\n    },\n    operation: {\n      op: 'sendSyntheticReminder',\n      payload: {\n        schemaVersion: '1',\n        nextActionId: record.nextActionId,\n        audienceKind: audience,\n        redactedRecipientId: record.recipientRedacted,\n        channel: 'DASHBOARD_ONLY',\n        reminderRevisionId: reminderRevisionId\n      }\n    }\n  };\n  return { json: {\n    nextActionId: record.nextActionId,\n    audience: audience,\n    routing: record.routing,\n    dueAt: record.dueAt,\n    dueClassification: record.dueClassification,\n    redactedRecipientId: record.recipientRedacted,\n    idempotencyKey: idempotencyKey,\n    commandId: commandId,\n    reminderRevisionId: reminderRevisionId,\n    channel: 'DASHBOARD_ONLY',\n    reminderEnvelope: envelope\n  } };\n});"
+      },
+      "id": "4969776d-2877-4bc7-8257-11c6d6dd9668",
+      "name": "Build Reminder Envelope",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2432,
+        -240
+      ],
+      "notes": "Deterministic reminder envelope: rem-/rev- keys are built from dayKey, nextActionId, audience and workflowRevision only."
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "signatureStatus",
+              "name": "signatureStatus",
+              "value": "BLOCKED_BY_N8N_SIGNER_DECISION",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "3ddb1cac-cccf-4272-b795-96c85381a5f0",
+      "name": "SIGNER BLOCKED — DO NOT ACTIVATE",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2656,
+        -240
+      ],
+      "notesInFlow": true,
+      "notes": "SIGNER_BLOCKED: the CRM signing decision is unresolved. This node only stamps signatureStatus. No signature is calculated and no key material is used."
+    },
+    {
+      "parameters": {
+        "jsCode": "// MOCK transport: fixed response, no network call. Keeps the envelope and the logical item identity.\nreturn $input.all().map(function (item) {\n  const record = item.json;\n  return { json: {\n    nextActionId: record.nextActionId,\n    audience: record.audience,\n    routing: record.routing,\n    dueAt: record.dueAt,\n    dueClassification: record.dueClassification,\n    redactedRecipientId: record.redactedRecipientId,\n    idempotencyKey: record.idempotencyKey,\n    reminderRevisionId: record.reminderRevisionId,\n    channel: record.channel,\n    signatureStatus: record.signatureStatus,\n    reminderEnvelope: record.reminderEnvelope,\n    gatewayOperation: 'sendSyntheticReminder',\n    transport: 'MOCK',\n    httpStatus: 200,\n    wireStatus: 'APPLIED',\n    cached: false\n  } };\n});"
+      },
+      "id": "c286a373-bb1f-4b4d-9d14-93202023ea03",
+      "name": "Mock CRM Gateway — sendSyntheticReminder",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        -240
+      ],
+      "notes": "MOCK-only gateway. Returns a fixed status object and preserves the original envelope. Performs no network call."
+    },
+    {
+      "parameters": {
+        "jsCode": "// One deterministic acknowledgement per successful MOCK send. No Date.now(), no execution id, no randomness.\nconst config = $('Test Config').first().json;\nreturn $input.all().map(function (item) {\n  const record = item.json;\n  const audience = record.audience;\n  const acknowledgementKey = 'ack-' + config.dayKey + '-' + record.nextActionId + '-' + audience + '-r' + config.workflowRevision;\n  const commandId = 'cmd-' + acknowledgementKey;\n  const acknowledgement = {\n    schemaVersion: '1',\n    commandId: commandId,\n    commandName: 'acknowledgeReminder',\n    idempotencyKey: acknowledgementKey,\n    correlationId: config.correlationId,\n    organizationId: config.organizationId,\n    source: { kind: config.sourceKind, provider: config.sourceProvider, connectionId: null },\n    actor: { kind: config.actorKind, serviceId: config.serviceId },\n    occurredAt: config.referenceNow,\n    automationSource: {\n      kind: 'N8N_AUTOMATION',\n      workflowId: config.automationWorkflowId,\n      workflowRevision: config.workflowRevision,\n      n8nExecutionId: config.n8nExecutionId,\n      sourceEventId: config.sourceEventId,\n      workflowLabel: config.workflowLabel\n    },\n    operation: {\n      op: 'acknowledgeReminder',\n      payload: {\n        schemaVersion: '1',\n        nextActionId: record.nextActionId,\n        notificationOutcome: 'SENT',\n        reminderRevisionId: record.reminderRevisionId,\n        channel: 'DASHBOARD_ONLY'\n      }\n    }\n  };\n  return { json: {\n    nextActionId: record.nextActionId,\n    audience: audience,\n    routing: record.routing,\n    dueAt: record.dueAt,\n    dueClassification: record.dueClassification,\n    redactedRecipientId: record.redactedRecipientId || '',\n    reminderIdempotencyKey: record.idempotencyKey,\n    reminderRevisionId: record.reminderRevisionId,\n    reminderEnvelope: record.reminderEnvelope,\n    signatureStatus: record.signatureStatus,\n    gatewayOperation: record.gatewayOperation,\n    transport: record.transport,\n    httpStatus: record.httpStatus,\n    wireStatus: record.wireStatus,\n    cached: record.cached,\n    commandId: commandId,\n    acknowledgementKey: acknowledgementKey,\n    notificationOutcome: 'SENT',\n    reason: null,\n    acknowledgement: acknowledgement\n  } };\n});"
+      },
+      "id": "0644c3f5-e832-4962-9a07-9b08f13a99bb",
+      "name": "Build Acknowledgement",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3104,
+        -240
+      ],
+      "notes": "notificationOutcome SENT, keyed by ack-{dayKey}-{nextActionId}-{audience}-r{workflowRevision}."
+    },
+    {
+      "parameters": {
+        "jsCode": "// FALLBACK items never produce a sendSyntheticReminder call: only an acknowledgement with notificationOutcome SKIPPED.\nconst config = $('Test Config').first().json;\nreturn $input.all().map(function (item) {\n  const record = item.json;\n  const audience = record.audience;\n  const acknowledgementKey = 'ack-' + config.dayKey + '-' + record.nextActionId + '-' + audience + '-r' + config.workflowRevision;\n  const commandId = 'cmd-' + acknowledgementKey;\n  // Deterministic revision id for the skipped reminder: ack-...-NONE-r3 pairs with rev-...-NONE-r3.\n  const reminderRevisionId = 'rev-' + config.dayKey + '-' + record.nextActionId + '-' + audience + '-r' + config.workflowRevision;\n  const acknowledgement = {\n    schemaVersion: '1',\n    commandId: commandId,\n    commandName: 'acknowledgeReminder',\n    idempotencyKey: acknowledgementKey,\n    correlationId: config.correlationId,\n    organizationId: config.organizationId,\n    source: { kind: config.sourceKind, provider: config.sourceProvider, connectionId: null },\n    actor: { kind: config.actorKind, serviceId: config.serviceId },\n    occurredAt: config.referenceNow,\n    automationSource: {\n      kind: 'N8N_AUTOMATION',\n      workflowId: config.automationWorkflowId,\n      workflowRevision: config.workflowRevision,\n      n8nExecutionId: config.n8nExecutionId,\n      sourceEventId: config.sourceEventId,\n      workflowLabel: config.workflowLabel\n    },\n    operation: {\n      op: 'acknowledgeReminder',\n      payload: {\n        schemaVersion: '1',\n        nextActionId: record.nextActionId,\n        notificationOutcome: 'SKIPPED',\n        reminderRevisionId: reminderRevisionId,\n        channel: 'DASHBOARD_ONLY'\n      }\n    }\n  };\n  return { json: {\n    nextActionId: record.nextActionId,\n    audience: audience,\n    routing: record.routing,\n    dueAt: record.dueAt,\n    dueClassification: record.dueClassification,\n    redactedRecipientId: '',\n    reminderIdempotencyKey: null,\n    reminderRevisionId: reminderRevisionId,\n    reminderEnvelope: null,\n    gatewayOperation: 'acknowledgeReminder',\n    transport: 'MOCK',\n    commandId: commandId,\n    acknowledgementKey: acknowledgementKey,\n    notificationOutcome: 'SKIPPED',\n    reason: 'no_owner_or_supervisor',\n    acknowledgement: acknowledgement\n  } };\n});"
+      },
+      "id": "f2210b2e-8f88-49d1-8ea0-3080ed0cadf3",
+      "name": "Build Fallback Acknowledgement",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3104,
+        -48
+      ],
+      "notes": "Fallback branch: no sendSyntheticReminder call, notificationOutcome SKIPPED with reason no_owner_or_supervisor."
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "8eadb3fd-ad27-44b0-8d3c-4a1438841e5d",
+      "name": "Schedule Every 15 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        192
+      ],
+      "notes": "MOCK schedule: every 15 minutes. Unpublished workflow, so this schedule does not run yet."
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "id": "a5354788-df93-4eb0-8780-c9c87976f1bb",
+      "name": "Schedule Daily 09:00 Bangkok",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        384
+      ],
+      "notes": "MOCK schedule: daily 09:00 Asia/Bangkok (workflow timezone). Unpublished workflow, so this schedule does not run yet."
+    },
+    {
+      "parameters": {},
+      "id": "2fda9494-e842-4a9a-b081-d853cb24c9c3",
+      "name": "Merge Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2304,
+        288
+      ],
+      "notes": "Input 1: acknowledged reminders and fallbacks. Input 2: all annotated records, used to reconcile counts and drop reasons."
+    },
+    {
+      "parameters": {},
+      "id": "a5b5efec-4b07-41fd-a002-8721d4fecd2e",
+      "name": "Combine Acknowledgements",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        3328,
+        -144
+      ],
+      "notes": "Appends the sent-reminder acknowledgements and the fallback acknowledgement into one stream."
+    },
+    {
+      "parameters": {
+        "jsCode": "// MOCK transport: fixed response, no network call. Keeps the acknowledgement envelope and the logical item identity.\nreturn $input.all().map(function (item) {\n  const record = item.json;\n  return { json: {\n    nextActionId: record.nextActionId,\n    audience: record.audience,\n    routing: record.routing,\n    dueAt: record.dueAt,\n    dueClassification: record.dueClassification,\n    redactedRecipientId: record.redactedRecipientId || '',\n    acknowledgementKey: record.acknowledgementKey,\n    notificationOutcome: record.notificationOutcome,\n    reason: record.reason || null,\n    reminderIdempotencyKey: record.reminderIdempotencyKey || null,\n    reminderRevisionId: record.reminderRevisionId || null,\n    reminderEnvelope: record.reminderEnvelope || null,\n    signatureStatus: record.signatureStatus || null,\n    contractShapeValid: record.contractShapeValid === true,\n    gatewayOperation: 'acknowledgeReminder',\n    transport: 'MOCK',\n    httpStatus: 200,\n    wireStatus: 'APPLIED',\n    cached: false,\n    acknowledgement: record.acknowledgement\n  } };\n});"
+      },
+      "id": "558b1b6f-24ec-4456-b2d9-967ccd792957",
+      "name": "Mock CRM Gateway — acknowledgeReminder",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3552,
+        -144
+      ],
+      "notes": "MOCK-only gateway for acknowledgements. Returns a fixed status object and performs no network call."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aggregates one MOCK run into a single deterministic report item.\nconst config = $('Test Config').first().json;\nconst seenCount = $('Synthetic NextActions').all().length;\nconst validatedCount = $('Reject Malformed Records').all().length;\n\nconst incoming = $input.all().map(function (item) { return item.json; });\nconst acknowledgements = incoming.filter(function (row) { return !!row.acknowledgementKey; });\nconst records = incoming.filter(function (row) { return !row.acknowledgementKey; });\nconst droppedRecords = records.filter(function (row) { return !!row.exclusionReason; });\nconst eligibleRecords = records.filter(function (row) { return !row.exclusionReason; });\nconst sentAcks = acknowledgements.filter(function (row) { return row.notificationOutcome === 'SENT'; });\nconst skippedAcks = acknowledgements.filter(function (row) { return row.notificationOutcome === 'SKIPPED'; });\n\nfunction byDueAtThenId(a, b) {\n  if (a.dueAt < b.dueAt) { return -1; }\n  if (a.dueAt > b.dueAt) { return 1; }\n  if (a.nextActionId < b.nextActionId) { return -1; }\n  if (a.nextActionId > b.nextActionId) { return 1; }\n  return 0;\n}\nfunction uniqueValues(list, field) {\n  const seen = {};\n  list.forEach(function (row) { seen[String(row[field])] = true; });\n  return Object.keys(seen).length;\n}\n\nconst sentSorted = sentAcks.slice().sort(byDueAtThenId);\nconst skippedSorted = skippedAcks.slice().sort(byDueAtThenId);\n\nconst reminders = sentSorted.map(function (row) {\n  return {\n    nextActionId: row.nextActionId,\n    audienceKind: row.audience,\n    redactedRecipientId: row.redactedRecipientId,\n    channel: 'DASHBOARD_ONLY',\n    idempotencyKey: row.reminderIdempotencyKey,\n    reminderRevisionId: row.reminderRevisionId,\n    signatureStatus: 'BLOCKED_BY_N8N_SIGNER_DECISION',\n    envelope: row.reminderEnvelope\n  };\n});\n\nconst acknowledgementList = acknowledgements.map(function (row) {\n  return {\n    nextActionId: row.nextActionId,\n    audienceKind: row.audience,\n    routing: row.routing,\n    acknowledgementKey: row.acknowledgementKey,\n    notificationOutcome: row.notificationOutcome,\n    reason: row.reason,\n    httpStatus: row.httpStatus,\n    wireStatus: row.wireStatus,\n    cached: row.cached,\n    envelope: row.acknowledgement\n  };\n});\n\nconst malformedCount = seenCount - validatedCount;\nconst unacknowledgedEligible = eligibleRecords.length - acknowledgements.length;\nconst errorCount = malformedCount + (unacknowledgedEligible > 0 ? unacknowledgedEligible : 0);\n\nconst contractValidated = acknowledgements.filter(function (row) { return row.contractShapeValid === true; });\nconst reminderEnvelopesChecked = acknowledgements.filter(function (row) { return row.reminderEnvelope !== null && row.reminderEnvelope !== undefined; }).length;\nconst acknowledgementEnvelopesChecked = acknowledgements.length;\nconst contractValidation = {\n  reminderEnvelopesChecked: reminderEnvelopesChecked,\n  acknowledgementEnvelopesChecked: acknowledgementEnvelopesChecked,\n  allValid: contractValidated.length === acknowledgements.length\n};\n\nconst redactedPattern = /^(owner|supervisor)-[A-Z]$/;\nconst noRawPii = acknowledgements.every(function (row) {\n  const recipient = row.redactedRecipientId ? String(row.redactedRecipientId) : '';\n  return recipient === '' || recipient === 'NONE' || redactedPattern.test(recipient);\n});\n\nreturn [{ json: {\n  workflow: 'CRM — SLA Reminder — N8N/1.1 — Draft',\n  mode: config.mode,\n  active: false,\n  signatureStatus: 'BLOCKED_BY_N8N_SIGNER_DECISION',\n  counts: {\n    seen: seenCount,\n    eligible: eligibleRecords.length,\n    send: sentAcks.length,\n    fallback: skippedAcks.length,\n    acknowledged: acknowledgements.length,\n    dropped: droppedRecords.length,\n    errors: errorCount\n  },\n  contractValidation: contractValidation,\n  sentNextActionIds: sentSorted.map(function (row) { return row.nextActionId; }),\n  fallbackNextActionIds: skippedSorted.map(function (row) { return row.nextActionId; }),\n  dropped: droppedRecords.map(function (row) { return { nextActionId: row.nextActionId, reason: row.exclusionReason }; }),\n  invariants: {\n    oneReminderPerNextAction: (uniqueValues(eligibleRecords, 'nextActionId') === eligibleRecords.length) && ((sentAcks.length + skippedAcks.length) === eligibleRecords.length),\n    uniqueReminderIdempotencyKeys: uniqueValues(sentAcks, 'reminderIdempotencyKey') === sentAcks.length,\n    uniqueAcknowledgementKeys: uniqueValues(acknowledgements, 'acknowledgementKey') === acknowledgements.length,\n    noRealHttpCalls: true,\n    noSecretInOutput: true,\n    noRawPii: noRawPii\n  },\n  reminders: reminders,\n  acknowledgements: acknowledgementList\n} }];"
+      },
+      "id": "17773f6f-6145-491a-82c9-354662eb4bd5",
+      "name": "Build Final Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2528,
+        288
+      ],
+      "notes": "Reconciles the MOCK run: counts, deterministic id lists, drop reasons and invariants. Contains no credential value and no signature."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Contract shape validator for the CRM AutomationRequestSchema.\n// It runs once on the single stream that carries every envelope of the run:\n// the acknowledgement envelopes (4) plus the reminder envelope carried next to\n// each SENT acknowledgement (3) = 7 envelopes. Any deviation throws, so the\n// execution fails instead of shipping a non-conforming envelope.\nconst ENVELOPE_KEYS = ['schemaVersion', 'commandId', 'commandName', 'idempotencyKey', 'correlationId', 'organizationId', 'source', 'actor', 'occurredAt', 'automationSource', 'operation'];\nconst SOURCE_KEYS = ['kind', 'provider', 'connectionId'];\nconst ACTOR_KEYS = ['kind', 'serviceId'];\nconst AUTOMATION_SOURCE_KEYS = ['kind', 'workflowId', 'workflowRevision', 'n8nExecutionId', 'sourceEventId', 'workflowLabel'];\nconst PAYLOAD_KEYS = {\n  sendSyntheticReminder: ['schemaVersion', 'nextActionId', 'audienceKind', 'redactedRecipientId', 'channel', 'reminderRevisionId'],\n  acknowledgeReminder: ['schemaVersion', 'nextActionId', 'notificationOutcome', 'reminderRevisionId', 'channel']\n};\n\nfunction fail(message) {\n  throw new Error('[CRM AutomationRequestSchema] ' + message);\n}\nfunction isPlainObject(value) {\n  return !!value && typeof value === 'object' && !Array.isArray(value);\n}\nfunction nonEmptyString(value) {\n  return typeof value === 'string' && value.length > 0;\n}\nfunction checkExactKeys(value, allowed, label) {\n  const missing = allowed.filter(function (key) { return !(key in value); });\n  const unknown = Object.keys(value).filter(function (key) { return allowed.indexOf(key) === -1; });\n  if (missing.length > 0) { fail(label + ': missing keys -> ' + missing.join(', ')); }\n  if (unknown.length > 0) { fail(label + ': unknown keys -> ' + unknown.join(', ')); }\n}\n\nfunction validateEnvelope(envelope, label) {\n  if (!isPlainObject(envelope)) { fail(label + ': envelope is missing'); }\n  checkExactKeys(envelope, ENVELOPE_KEYS, label + ' envelope');\n  if (envelope.schemaVersion !== '1') { fail(label + ': schemaVersion must be \"1\"'); }\n  if (!nonEmptyString(envelope.commandId)) { fail(label + ': commandId is empty'); }\n  if (!nonEmptyString(envelope.idempotencyKey)) { fail(label + ': idempotencyKey is empty'); }\n  if (!nonEmptyString(envelope.correlationId)) { fail(label + ': correlationId is empty'); }\n  if (!nonEmptyString(envelope.organizationId)) { fail(label + ': organizationId is empty'); }\n  if (!nonEmptyString(envelope.occurredAt)) { fail(label + ': occurredAt is empty'); }\n  if (!isPlainObject(envelope.source)) { fail(label + ': source is missing'); }\n  checkExactKeys(envelope.source, SOURCE_KEYS, label + ' source');\n  if (!isPlainObject(envelope.actor)) { fail(label + ': actor is missing'); }\n  checkExactKeys(envelope.actor, ACTOR_KEYS, label + ' actor');\n  if (!nonEmptyString(envelope.actor.serviceId)) { fail(label + ': actor.serviceId is empty'); }\n  if (!isPlainObject(envelope.automationSource)) { fail(label + ': automationSource is missing'); }\n  checkExactKeys(envelope.automationSource, AUTOMATION_SOURCE_KEYS, label + ' automationSource');\n  if (envelope.automationSource.kind !== 'N8N_AUTOMATION') { fail(label + ': automationSource.kind must be N8N_AUTOMATION'); }\n  if (!nonEmptyString(envelope.automationSource.workflowId)) { fail(label + ': automationSource.workflowId is empty'); }\n  if (!isPlainObject(envelope.operation)) { fail(label + ': operation is missing'); }\n  checkExactKeys(envelope.operation, ['op', 'payload'], label + ' operation');\n  if (envelope.commandName !== envelope.operation.op) { fail(label + ': commandName does not equal operation.op'); }\n  const allowedPayloadKeys = PAYLOAD_KEYS[envelope.operation.op];\n  if (!allowedPayloadKeys) { fail(label + ': unsupported operation.op ' + envelope.operation.op); }\n  const payload = envelope.operation.payload;\n  if (!isPlainObject(payload)) { fail(label + ': operation.payload is missing'); }\n  checkExactKeys(payload, allowedPayloadKeys, label + ' payload');\n  if (payload.schemaVersion !== '1') { fail(label + ': payload.schemaVersion must be \"1\"'); }\n  if (!nonEmptyString(payload.nextActionId)) { fail(label + ': payload.nextActionId is empty'); }\n  if (!nonEmptyString(payload.reminderRevisionId)) { fail(label + ': payload.reminderRevisionId is null or empty'); }\n  if (payload.channel !== 'DASHBOARD_ONLY') { fail(label + ': payload.channel must be DASHBOARD_ONLY'); }\n  if (envelope.operation.op === 'sendSyntheticReminder') {\n    if (payload.audienceKind !== 'OWNER' && payload.audienceKind !== 'SUPERVISOR') { fail(label + ': payload.audienceKind must be OWNER or SUPERVISOR'); }\n    if (!nonEmptyString(payload.redactedRecipientId)) { fail(label + ': payload.redactedRecipientId is empty'); }\n  } else if (payload.notificationOutcome !== 'SENT' && payload.notificationOutcome !== 'SKIPPED') {\n    fail(label + ': payload.notificationOutcome must be SENT or SKIPPED');\n  }\n}\n\nreturn $input.all().map(function (item) {\n  const record = item.json;\n  const label = 'nextActionId ' + record.nextActionId;\n  if (record.reminderEnvelope !== null && record.reminderEnvelope !== undefined) {\n    validateEnvelope(record.reminderEnvelope, label + ' reminder');\n  }\n  validateEnvelope(record.acknowledgement, label + ' acknowledgement');\n  const output = {};\n  Object.keys(record).forEach(function (key) { output[key] = record[key]; });\n  output.contractShapeValid = true;\n  return { json: output };\n});"
+      },
+      "id": "9bca12ee-e33a-4cf5-b78d-27e3a733fb17",
+      "name": "Validate CRM AutomationRequest Shape",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3552,
+        48
+      ],
+      "notes": "CRM AutomationRequestSchema shape validator. Throws on a missing or unknown envelope key, on commandName != operation.op, on unknown payload fields, on a null/empty reminderRevisionId, on an empty idempotencyKey/commandId, and on a missing source, actor or automationSource. Emits contractShapeValid true and keeps every input item and its pairing."
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Test Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Config": {
+      "main": [
+        [
+          {
+            "node": "Synthetic NextActions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Synthetic NextActions": {
+      "main": [
+        [
+          {
+            "node": "Reject Malformed Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reject Malformed Records": {
+      "main": [
+        [
+          {
+            "node": "Compute Due Window",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Due Window": {
+      "main": [
+        [
+          {
+            "node": "Drop Non-Open",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Drop Non-Open": {
+      "main": [
+        [
+          {
+            "node": "Drop Snoozed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drop Snoozed": {
+      "main": [
+        [
+          {
+            "node": "Drop Not Due",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drop Not Due": {
+      "main": [
+        [
+          {
+            "node": "Sort Deterministically",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sort Deterministically": {
+      "main": [
+        [
+          {
+            "node": "Keep One Item Per NextAction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Keep One Item Per NextAction": {
+      "main": [
+        [
+          {
+            "node": "Resolve Audience and Routing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Audience and Routing": {
+      "main": [
+        [
+          {
+            "node": "Route SEND or FALLBACK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route SEND or FALLBACK": {
+      "main": [
+        [
+          {
+            "node": "Build Reminder Envelope",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Fallback Acknowledgement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Reminder Envelope": {
+      "main": [
+        [
+          {
+            "node": "SIGNER BLOCKED — DO NOT ACTIVATE",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SIGNER BLOCKED — DO NOT ACTIVATE": {
+      "main": [
+        [
+          {
+            "node": "Mock CRM Gateway — sendSyntheticReminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mock CRM Gateway — sendSyntheticReminder": {
+      "main": [
+        [
+          {
+            "node": "Build Acknowledgement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Acknowledgement": {
+      "main": [
+        [
+          {
+            "node": "Combine Acknowledgements",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Fallback Acknowledgement": {
+      "main": [
+        [
+          {
+            "node": "Combine Acknowledgements",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Schedule Every 15 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Test Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Daily 09:00 Bangkok": {
+      "main": [
+        [
+          {
+            "node": "Test Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Results": {
+      "main": [
+        [
+          {
+            "node": "Build Final Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Acknowledgements": {
+      "main": [
+        [
+          {
+            "node": "Validate CRM AutomationRequest Shape",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mock CRM Gateway — acknowledgeReminder": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate CRM AutomationRequest Shape": {
+      "main": [
+        [
+          {
+            "node": "Mock CRM Gateway — acknowledgeReminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timezone": "Asia/Bangkok"
+  },
+  "versionId": "90c36da2-f9af-49da-8aac-096001710471",
+  "meta": {
+    "instanceId": "a3afc4de348fda80a2d90bd3b41a99558a78ca2ae124556ee302dc8da53eeacf"
+  },
+  "nodeGroups": [
+    {
+      "id": "4161d837-755e-4026-90fd-24dc8e573283",
+      "name": "Load and validate synthetic records",
+      "nodeIds": [
+        "f5985414-3471-4b39-8bfd-108158a12132",
+        "528418b7-d769-489c-a7e5-b44d4df257ba",
+        "fe810c9f-d5ab-49d1-8c3f-9145f0bf124b",
+        "566a68a0-3e4d-46e4-ac78-ca56197f26f6"
+      ],
+      "description": "Provides the fixed MOCK constants and the seven synthetic NextActions, rejects incomplete records and computes the due window"
+    },
+    {
+      "id": "1fcc22b4-88a5-4535-b579-5e1f40b91c77",
+      "name": "Filter and order eligible records",
+      "nodeIds": [
+        "63426873-6399-4a95-ae63-0ece7c1855d1",
+        "5647873e-3e57-47ad-a919-24bb3116a722",
+        "54179fa3-6eb9-46d6-96a8-3371bb71bf38",
+        "4237c471-d2a6-47df-ba1b-c2367ac57261",
+        "0e28105a-e627-4334-b780-422ab1bbd6b8",
+        "f9552b3a-25e9-41cb-8173-dfbcc1f125ba"
+      ],
+      "description": "Drops closed, snoozed and not-yet-due records, orders the rest and decides the audience and the routing"
+    },
+    {
+      "id": "4844f4f2-35e9-4269-9a74-a725742a7110",
+      "name": "Dispatch and acknowledge reminders",
+      "nodeIds": [
+        "af04aa73-0f25-4843-8ddf-7685653f6149",
+        "4969776d-2877-4bc7-8257-11c6d6dd9668",
+        "3ddb1cac-cccf-4272-b795-96c85381a5f0",
+        "c286a373-bb1f-4b4d-9d14-93202023ea03",
+        "0644c3f5-e832-4962-9a07-9b08f13a99bb",
+        "f2210b2e-8f88-49d1-8ea0-3080ed0cadf3",
+        "a5b5efec-4b07-41fd-a002-8721d4fecd2e",
+        "9bca12ee-e33a-4cf5-b78d-27e3a733fb17",
+        "558b1b6f-24ec-4456-b2d9-967ccd792957"
+      ],
+      "description": "Splits SEND from FALLBACK, builds the envelopes, validates the CRM contract shape and records each outcome through the mock gateways"
+    },
+    {
+      "id": "6cfb7ea6-0537-4c1b-94d1-39ace8835774",
+      "name": "Merge results into final report",
+      "nodeIds": [
+        "2fda9494-e842-4a9a-b081-d853cb24c9c3",
+        "17773f6f-6145-491a-82c9-354662eb4bd5"
+      ],
+      "description": "Combines the acknowledgements with every annotated record and emits one report item with counts and invariants"
+    }
+  ],
+  "id": "TmNxnx8zMLgqMIcZ",
+  "tags": []
+}

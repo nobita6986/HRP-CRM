@@ -1,0 +1,45 @@
+{
+  "countsCheck": {
+    "seenEq": true,
+    "eligibleEq": true,
+    "sendEq": true,
+    "fallbackEq": true,
+    "acknowledgedEq": true,
+    "droppedEq": true,
+    "errorsEq": true,
+    "eligibleRecomputedMatches": true,
+    "seenRecomputedMatches": true
+  },
+  "uniqueness": {
+    "reminderKeysUnique": true,
+    "acknowledgementKeysUnique": true,
+    "commandIdsUnique": true,
+    "remKeyCount": 3,
+    "ackKeyCount": 4,
+    "cmdIdCount": 7
+  },
+  "routing": {
+    "na001Exists": true,
+    "na006Exists": true,
+    "na001And006Separate": true,
+    "na002IsSupervisor": true,
+    "na002AudienceKind": "SUPERVISOR",
+    "na005HasNoReminder": true,
+    "na005HasFallbackAck": true,
+    "na005RoutingFALLBACK": true,
+    "na005ReasonNotInPayload": true,
+    "na005ReasonNotInEnvelope": true
+  },
+  "leak": {
+    "clean": true,
+    "findings": []
+  },
+  "workflowStatic": {
+    "hasHttpRequestNode": false,
+    "hasCredential": false,
+    "pinDataEntries": false,
+    "active": false,
+    "nodeCount": 24,
+    "timezone": "Asia/Bangkok"
+  }
+}

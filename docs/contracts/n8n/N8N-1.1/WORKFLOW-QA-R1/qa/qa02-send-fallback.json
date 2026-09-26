@@ -1,0 +1,29 @@
+{
+  "sendBuilderOutgoing": [
+    "SIGNER BLOCKED ΓÇö DO NOT ACTIVATE"
+  ],
+  "fbBuilderOutgoing": [
+    "Combine Acknowledgements"
+  ],
+  "buildReminderEnvelopedownstream": [
+    "Build Reminder Envelope",
+    "SIGNER BLOCKED ΓÇö DO NOT ACTIVATE",
+    "Mock CRM Gateway ΓÇö sendSyntheticReminder",
+    "Build Acknowledgement",
+    "Combine Acknowledgements",
+    "Validate CRM AutomationRequest Shape",
+    "Mock CRM Gateway ΓÇö acknowledgeReminder",
+    "Merge Results",
+    "Build Final Output"
+  ],
+  "buildReminderReachesMockSend": true,
+  "buildFallbackAckdownstream": [
+    "Build Fallback Acknowledgement",
+    "Combine Acknowledgements",
+    "Validate CRM AutomationRequest Shape",
+    "Mock CRM Gateway ΓÇö acknowledgeReminder",
+    "Merge Results",
+    "Build Final Output"
+  ],
+  "buildFallbackReachesMockAck": true
+}

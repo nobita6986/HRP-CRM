@@ -1,0 +1,35 @@
+{
+  "probe1_commandIdMissing": {
+    "expectReject": true,
+    "passed": true,
+    "issues": [
+      {
+        "path": "commandId",
+        "code": "invalid_type",
+        "message": "Required"
+      }
+    ]
+  },
+  "probe2_unknownTopLevelField": {
+    "expectReject": true,
+    "passed": true,
+    "issues": [
+      {
+        "path": "",
+        "code": "unrecognized_keys",
+        "message": "Unrecognized key(s) in object: 'secret_top_level_field'"
+      }
+    ]
+  },
+  "probe3_reminderRevisionIdNull": {
+    "expectReject": true,
+    "passed": true,
+    "issues": [
+      {
+        "path": "operation.payload.reminderRevisionId",
+        "code": "invalid_type",
+        "message": "Expected string, received null"
+      }
+    ]
+  }
+}

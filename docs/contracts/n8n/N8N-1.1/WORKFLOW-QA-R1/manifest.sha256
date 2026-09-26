@@ -1,0 +1,24 @@
+# N8N/1.1 WORKFLOW-QA-R1 manifest -- raw SHA-256 over committed blobs
+# Format: each blob's `<sha256>  <repo-relative-path>`.
+# Status: READY_FOR_T0_N8N11_MOCK_WORKFLOW_ACCEPTANCE.
+# This manifest does not self-hash (the manifest file itself is excluded).
+
+6467b7cf00bd4b0e354a5e7acc960529cb0a7bfc3fdd785e6d612f16c13db288  docs/contracts/n8n/N8N-1.1/WORKFLOW-QA-R1/ARTIFACT-PINS.md
+8094bc481534e02df0e4bcdc56304bdff56082067cc7ed47860659c22ce5eec0  docs/contracts/n8n/N8N-1.1/WORKFLOW-QA-R1/final-output.execution-7.json
+ddfdd08b981a1a78ba2e1b916694edd704ae57bcc71d37ad3d59e297109dc3c4  docs/contracts/n8n/N8N-1.1/WORKFLOW-QA-R1/LIMITATIONS.md
+6b4cf528343a763c0c440b867fb5d8819348975ccee3a758b9fac6f96470ccd3  docs/contracts/n8n/N8N-1.1/WORKFLOW-QA-R1/NEGATIVE-PROBES.json
+da33f329592a964fc2d5272d41b0bb1c21009cf47aea7a88456b420c02f51af5  docs/contracts/n8n/N8N-1.1/WORKFLOW-QA-R1/QA-REPORT.md
+20f591d6593f8e13bb5135815bc683c0bb24fbc526104f9084b936e6e76c82d8  docs/contracts/n8n/N8N-1.1/WORKFLOW-QA-R1/qa/qa02-graph.json
+723f35086d7db194e7a940b9e8820f4ed6834b60438479bbc24be834286b0c11  docs/contracts/n8n/N8N-1.1/WORKFLOW-QA-R1/qa/qa02-send-fallback.json
+2d3bbffc6af27cd2c82d4d2eb841043ffda4ab55f33f1487c95f0fb6e7f95bef  docs/contracts/n8n/N8N-1.1/WORKFLOW-QA-R1/qa/qa02-validator-downstream.json
+5f9b40dc21a7f78075433d0ae198b27667da8a2717f426e8909c5821c1b13703  docs/contracts/n8n/N8N-1.1/WORKFLOW-QA-R1/qa/qa04-invariants.json
+0f2c22d22357c134e5316c446de06efd76c26c3c64645673133bffec8f8fb861  docs/contracts/n8n/N8N-1.1/WORKFLOW-QA-R1/qa/runner-inspect.mjs
+eff036db148c33109d7f9c5920e60197f4f2dd390f1f9352b93dc216d83c9290  docs/contracts/n8n/N8N-1.1/WORKFLOW-QA-R1/qa/runner-qa02-graph.mjs
+bb6e2c9daf53b46ecacef3e9ef00aeecac150b4543da6507b9b147a4c4080350  docs/contracts/n8n/N8N-1.1/WORKFLOW-QA-R1/qa/runner-qa02-send-fallback.mjs
+92e68a7876a46b621df1867dec757194ebfe36f2db0bcf63b50aaec4a967ae7f  docs/contracts/n8n/N8N-1.1/WORKFLOW-QA-R1/qa/runner-qa02-validator-downstream.mjs
+a119893ff00b62a74ad9479b829723fb814b1ece3e5abc4a061fe1aa7c4b7cdb  docs/contracts/n8n/N8N-1.1/WORKFLOW-QA-R1/qa/runner-qa03-schema.mjs
+fb91debff0104a4b23a7aa78d4e930a6488904a22d2cc90096682861dba5da8c  docs/contracts/n8n/N8N-1.1/WORKFLOW-QA-R1/qa/runner-qa04-invariants.mjs
+b6e7fbf04ba5e63f04561fb70db3d531e4157b4f782d73508759e3319215b5f8  docs/contracts/n8n/N8N-1.1/WORKFLOW-QA-R1/qa/runner-qa05-negative.mjs
+979c9188f00f2a2a8562fc4a39ba2385188cfcebd028f5025d31a05b07cccc80  docs/contracts/n8n/N8N-1.1/WORKFLOW-QA-R1/README.md
+2a17b4504caa92363836060a27c6317fb2881ff4476ae0a17e555ec37fbde9f3  docs/contracts/n8n/N8N-1.1/WORKFLOW-QA-R1/SCHEMA-VALIDATION.json
+f1afa2b9c152a709e4c4db150cf2631bd6cff28665d31f95be274e0ee31dfef0  docs/contracts/n8n/N8N-1.1/WORKFLOW-QA-R1/workflow.json

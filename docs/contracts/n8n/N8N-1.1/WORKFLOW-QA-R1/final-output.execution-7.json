@@ -1,0 +1,382 @@
+[
+  {
+    "workflow": "CRM — SLA Reminder — N8N/1.1 — Draft",
+    "mode": "MOCK",
+    "active": false,
+    "signatureStatus": "BLOCKED_BY_N8N_SIGNER_DECISION",
+    "counts": {
+      "seen": 7,
+      "eligible": 4,
+      "send": 3,
+      "fallback": 1,
+      "acknowledged": 4,
+      "dropped": 3,
+      "errors": 0
+    },
+    "contractValidation": {
+      "reminderEnvelopesChecked": 3,
+      "acknowledgementEnvelopesChecked": 4,
+      "allValid": true
+    },
+    "sentNextActionIds": [
+      "na-002",
+      "na-001",
+      "na-006"
+    ],
+    "fallbackNextActionIds": [
+      "na-005"
+    ],
+    "dropped": [
+      {
+        "nextActionId": "na-003",
+        "reason": "SNOOZED"
+      },
+      {
+        "nextActionId": "na-004",
+        "reason": "NOT_OPEN"
+      },
+      {
+        "nextActionId": "na-007",
+        "reason": "NOT_DUE"
+      }
+    ],
+    "invariants": {
+      "oneReminderPerNextAction": true,
+      "uniqueReminderIdempotencyKeys": true,
+      "uniqueAcknowledgementKeys": true,
+      "noRealHttpCalls": true,
+      "noSecretInOutput": true,
+      "noRawPii": true
+    },
+    "reminders": [
+      {
+        "nextActionId": "na-002",
+        "audienceKind": "SUPERVISOR",
+        "redactedRecipientId": "supervisor-B",
+        "channel": "DASHBOARD_ONLY",
+        "idempotencyKey": "rem-20260926-na-002-SUPERVISOR-r3",
+        "reminderRevisionId": "rev-20260926-na-002-SUPERVISOR-r3",
+        "signatureStatus": "BLOCKED_BY_N8N_SIGNER_DECISION",
+        "envelope": {
+          "schemaVersion": "1",
+          "commandId": "cmd-rem-20260926-na-002-SUPERVISOR-r3",
+          "commandName": "sendSyntheticReminder",
+          "idempotencyKey": "rem-20260926-na-002-SUPERVISOR-r3",
+          "correlationId": "corr-n8n11-synthetic-001",
+          "organizationId": "org-synthetic-crm",
+          "source": {
+            "kind": "HRP_UI",
+            "provider": "HRP_UI",
+            "connectionId": null
+          },
+          "actor": {
+            "kind": "SERVICE",
+            "serviceId": "svc-n8n-crm-synthetic"
+          },
+          "occurredAt": "2026-09-26T09:00:00.000Z",
+          "automationSource": {
+            "kind": "N8N_AUTOMATION",
+            "workflowId": "crm-sla-reminder-n8n11-draft",
+            "workflowRevision": 3,
+            "n8nExecutionId": "exec-synthetic-001",
+            "sourceEventId": "manual-synthetic",
+            "workflowLabel": "sla-reminder-crm"
+          },
+          "operation": {
+            "op": "sendSyntheticReminder",
+            "payload": {
+              "schemaVersion": "1",
+              "nextActionId": "na-002",
+              "audienceKind": "SUPERVISOR",
+              "redactedRecipientId": "supervisor-B",
+              "channel": "DASHBOARD_ONLY",
+              "reminderRevisionId": "rev-20260926-na-002-SUPERVISOR-r3"
+            }
+          }
+        }
+      },
+      {
+        "nextActionId": "na-001",
+        "audienceKind": "OWNER",
+        "redactedRecipientId": "owner-A",
+        "channel": "DASHBOARD_ONLY",
+        "idempotencyKey": "rem-20260926-na-001-OWNER-r3",
+        "reminderRevisionId": "rev-20260926-na-001-OWNER-r3",
+        "signatureStatus": "BLOCKED_BY_N8N_SIGNER_DECISION",
+        "envelope": {
+          "schemaVersion": "1",
+          "commandId": "cmd-rem-20260926-na-001-OWNER-r3",
+          "commandName": "sendSyntheticReminder",
+          "idempotencyKey": "rem-20260926-na-001-OWNER-r3",
+          "correlationId": "corr-n8n11-synthetic-001",
+          "organizationId": "org-synthetic-crm",
+          "source": {
+            "kind": "HRP_UI",
+            "provider": "HRP_UI",
+            "connectionId": null
+          },
+          "actor": {
+            "kind": "SERVICE",
+            "serviceId": "svc-n8n-crm-synthetic"
+          },
+          "occurredAt": "2026-09-26T09:00:00.000Z",
+          "automationSource": {
+            "kind": "N8N_AUTOMATION",
+            "workflowId": "crm-sla-reminder-n8n11-draft",
+            "workflowRevision": 3,
+            "n8nExecutionId": "exec-synthetic-001",
+            "sourceEventId": "manual-synthetic",
+            "workflowLabel": "sla-reminder-crm"
+          },
+          "operation": {
+            "op": "sendSyntheticReminder",
+            "payload": {
+              "schemaVersion": "1",
+              "nextActionId": "na-001",
+              "audienceKind": "OWNER",
+              "redactedRecipientId": "owner-A",
+              "channel": "DASHBOARD_ONLY",
+              "reminderRevisionId": "rev-20260926-na-001-OWNER-r3"
+            }
+          }
+        }
+      },
+      {
+        "nextActionId": "na-006",
+        "audienceKind": "OWNER",
+        "redactedRecipientId": "owner-A",
+        "channel": "DASHBOARD_ONLY",
+        "idempotencyKey": "rem-20260926-na-006-OWNER-r3",
+        "reminderRevisionId": "rev-20260926-na-006-OWNER-r3",
+        "signatureStatus": "BLOCKED_BY_N8N_SIGNER_DECISION",
+        "envelope": {
+          "schemaVersion": "1",
+          "commandId": "cmd-rem-20260926-na-006-OWNER-r3",
+          "commandName": "sendSyntheticReminder",
+          "idempotencyKey": "rem-20260926-na-006-OWNER-r3",
+          "correlationId": "corr-n8n11-synthetic-001",
+          "organizationId": "org-synthetic-crm",
+          "source": {
+            "kind": "HRP_UI",
+            "provider": "HRP_UI",
+            "connectionId": null
+          },
+          "actor": {
+            "kind": "SERVICE",
+            "serviceId": "svc-n8n-crm-synthetic"
+          },
+          "occurredAt": "2026-09-26T09:00:00.000Z",
+          "automationSource": {
+            "kind": "N8N_AUTOMATION",
+            "workflowId": "crm-sla-reminder-n8n11-draft",
+            "workflowRevision": 3,
+            "n8nExecutionId": "exec-synthetic-001",
+            "sourceEventId": "manual-synthetic",
+            "workflowLabel": "sla-reminder-crm"
+          },
+          "operation": {
+            "op": "sendSyntheticReminder",
+            "payload": {
+              "schemaVersion": "1",
+              "nextActionId": "na-006",
+              "audienceKind": "OWNER",
+              "redactedRecipientId": "owner-A",
+              "channel": "DASHBOARD_ONLY",
+              "reminderRevisionId": "rev-20260926-na-006-OWNER-r3"
+            }
+          }
+        }
+      }
+    ],
+    "acknowledgements": [
+      {
+        "nextActionId": "na-002",
+        "audienceKind": "SUPERVISOR",
+        "routing": "SEND",
+        "acknowledgementKey": "ack-20260926-na-002-SUPERVISOR-r3",
+        "notificationOutcome": "SENT",
+        "reason": null,
+        "httpStatus": 200,
+        "wireStatus": "APPLIED",
+        "cached": false,
+        "envelope": {
+          "schemaVersion": "1",
+          "commandId": "cmd-ack-20260926-na-002-SUPERVISOR-r3",
+          "commandName": "acknowledgeReminder",
+          "idempotencyKey": "ack-20260926-na-002-SUPERVISOR-r3",
+          "correlationId": "corr-n8n11-synthetic-001",
+          "organizationId": "org-synthetic-crm",
+          "source": {
+            "kind": "HRP_UI",
+            "provider": "HRP_UI",
+            "connectionId": null
+          },
+          "actor": {
+            "kind": "SERVICE",
+            "serviceId": "svc-n8n-crm-synthetic"
+          },
+          "occurredAt": "2026-09-26T09:00:00.000Z",
+          "automationSource": {
+            "kind": "N8N_AUTOMATION",
+            "workflowId": "crm-sla-reminder-n8n11-draft",
+            "workflowRevision": 3,
+            "n8nExecutionId": "exec-synthetic-001",
+            "sourceEventId": "manual-synthetic",
+            "workflowLabel": "sla-reminder-crm"
+          },
+          "operation": {
+            "op": "acknowledgeReminder",
+            "payload": {
+              "schemaVersion": "1",
+              "nextActionId": "na-002",
+              "notificationOutcome": "SENT",
+              "reminderRevisionId": "rev-20260926-na-002-SUPERVISOR-r3",
+              "channel": "DASHBOARD_ONLY"
+            }
+          }
+        }
+      },
+      {
+        "nextActionId": "na-001",
+        "audienceKind": "OWNER",
+        "routing": "SEND",
+        "acknowledgementKey": "ack-20260926-na-001-OWNER-r3",
+        "notificationOutcome": "SENT",
+        "reason": null,
+        "httpStatus": 200,
+        "wireStatus": "APPLIED",
+        "cached": false,
+        "envelope": {
+          "schemaVersion": "1",
+          "commandId": "cmd-ack-20260926-na-001-OWNER-r3",
+          "commandName": "acknowledgeReminder",
+          "idempotencyKey": "ack-20260926-na-001-OWNER-r3",
+          "correlationId": "corr-n8n11-synthetic-001",
+          "organizationId": "org-synthetic-crm",
+          "source": {
+            "kind": "HRP_UI",
+            "provider": "HRP_UI",
+            "connectionId": null
+          },
+          "actor": {
+            "kind": "SERVICE",
+            "serviceId": "svc-n8n-crm-synthetic"
+          },
+          "occurredAt": "2026-09-26T09:00:00.000Z",
+          "automationSource": {
+            "kind": "N8N_AUTOMATION",
+            "workflowId": "crm-sla-reminder-n8n11-draft",
+            "workflowRevision": 3,
+            "n8nExecutionId": "exec-synthetic-001",
+            "sourceEventId": "manual-synthetic",
+            "workflowLabel": "sla-reminder-crm"
+          },
+          "operation": {
+            "op": "acknowledgeReminder",
+            "payload": {
+              "schemaVersion": "1",
+              "nextActionId": "na-001",
+              "notificationOutcome": "SENT",
+              "reminderRevisionId": "rev-20260926-na-001-OWNER-r3",
+              "channel": "DASHBOARD_ONLY"
+            }
+          }
+        }
+      },
+      {
+        "nextActionId": "na-006",
+        "audienceKind": "OWNER",
+        "routing": "SEND",
+        "acknowledgementKey": "ack-20260926-na-006-OWNER-r3",
+        "notificationOutcome": "SENT",
+        "reason": null,
+        "httpStatus": 200,
+        "wireStatus": "APPLIED",
+        "cached": false,
+        "envelope": {
+          "schemaVersion": "1",
+          "commandId": "cmd-ack-20260926-na-006-OWNER-r3",
+          "commandName": "acknowledgeReminder",
+          "idempotencyKey": "ack-20260926-na-006-OWNER-r3",
+          "correlationId": "corr-n8n11-synthetic-001",
+          "organizationId": "org-synthetic-crm",
+          "source": {
+            "kind": "HRP_UI",
+            "provider": "HRP_UI",
+            "connectionId": null
+          },
+          "actor": {
+            "kind": "SERVICE",
+            "serviceId": "svc-n8n-crm-synthetic"
+          },
+          "occurredAt": "2026-09-26T09:00:00.000Z",
+          "automationSource": {
+            "kind": "N8N_AUTOMATION",
+            "workflowId": "crm-sla-reminder-n8n11-draft",
+            "workflowRevision": 3,
+            "n8nExecutionId": "exec-synthetic-001",
+            "sourceEventId": "manual-synthetic",
+            "workflowLabel": "sla-reminder-crm"
+          },
+          "operation": {
+            "op": "acknowledgeReminder",
+            "payload": {
+              "schemaVersion": "1",
+              "nextActionId": "na-006",
+              "notificationOutcome": "SENT",
+              "reminderRevisionId": "rev-20260926-na-006-OWNER-r3",
+              "channel": "DASHBOARD_ONLY"
+            }
+          }
+        }
+      },
+      {
+        "nextActionId": "na-005",
+        "audienceKind": "NONE",
+        "routing": "FALLBACK",
+        "acknowledgementKey": "ack-20260926-na-005-NONE-r3",
+        "notificationOutcome": "SKIPPED",
+        "reason": "no_owner_or_supervisor",
+        "httpStatus": 200,
+        "wireStatus": "APPLIED",
+        "cached": false,
+        "envelope": {
+          "schemaVersion": "1",
+          "commandId": "cmd-ack-20260926-na-005-NONE-r3",
+          "commandName": "acknowledgeReminder",
+          "idempotencyKey": "ack-20260926-na-005-NONE-r3",
+          "correlationId": "corr-n8n11-synthetic-001",
+          "organizationId": "org-synthetic-crm",
+          "source": {
+            "kind": "HRP_UI",
+            "provider": "HRP_UI",
+            "connectionId": null
+          },
+          "actor": {
+            "kind": "SERVICE",
+            "serviceId": "svc-n8n-crm-synthetic"
+          },
+          "occurredAt": "2026-09-26T09:00:00.000Z",
+          "automationSource": {
+            "kind": "N8N_AUTOMATION",
+            "workflowId": "crm-sla-reminder-n8n11-draft",
+            "workflowRevision": 3,
+            "n8nExecutionId": "exec-synthetic-001",
+            "sourceEventId": "manual-synthetic",
+            "workflowLabel": "sla-reminder-crm"
+          },
+          "operation": {
+            "op": "acknowledgeReminder",
+            "payload": {
+              "schemaVersion": "1",
+              "nextActionId": "na-005",
+              "notificationOutcome": "SKIPPED",
+              "reminderRevisionId": "rev-20260926-na-005-NONE-r3",
+              "channel": "DASHBOARD_ONLY"
+            }
+          }
+        }
+      }
+    ]
+  }
+]

@@ -1,0 +1,72 @@
+{
+  "triggerCount": 3,
+  "triggers": [
+    {
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger"
+    },
+    {
+      "name": "Schedule Every 15 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger"
+    },
+    {
+      "name": "Schedule Daily 09:00 Bangkok",
+      "type": "n8n-nodes-base.scheduleTrigger"
+    }
+  ],
+  "manualTriggerPathLength": 22,
+  "manualTriggerPath": [
+    "Manual Trigger",
+    "Test Config",
+    "Synthetic NextActions",
+    "Reject Malformed Records",
+    "Compute Due Window",
+    "Drop Non-Open",
+    "Merge Results",
+    "Drop Snoozed",
+    "Build Final Output",
+    "Drop Not Due",
+    "Sort Deterministically",
+    "Keep One Item Per NextAction",
+    "Resolve Audience and Routing",
+    "Route SEND or FALLBACK",
+    "Build Reminder Envelope",
+    "Build Fallback Acknowledgement",
+    "SIGNER BLOCKED ΓÇö DO NOT ACTIVATE",
+    "Combine Acknowledgements",
+    "Mock CRM Gateway ΓÇö sendSyntheticReminder",
+    "Validate CRM AutomationRequest Shape",
+    "Build Acknowledgement",
+    "Mock CRM Gateway ΓÇö acknowledgeReminder"
+  ],
+  "nodeTypes": {
+    "n8n-nodes-base.manualTrigger": 1,
+    "n8n-nodes-base.set": 4,
+    "n8n-nodes-base.code": 8,
+    "n8n-nodes-base.filter": 4,
+    "n8n-nodes-base.sort": 1,
+    "n8n-nodes-base.removeDuplicates": 1,
+    "n8n-nodes-base.switch": 1,
+    "n8n-nodes-base.scheduleTrigger": 2,
+    "n8n-nodes-base.merge": 2
+  },
+  "validatorNodeName": "Validate CRM AutomationRequest Shape",
+  "validatorReachedFromTriggers": {
+    "Manual Trigger": true,
+    "Schedule Every 15 Minutes": true,
+    "Schedule Daily 09:00 Bangkok": true
+  },
+  "validatorToMockAckReachable": false,
+  "switchesCount": 1,
+  "switchOutputs": {
+    "Route SEND or FALLBACK": [
+      {
+        "output": "main",
+        "targets": [
+          "Build Reminder Envelope",
+          "Build Fallback Acknowledgement"
+        ]
+      }
+    ]
+  }
+}

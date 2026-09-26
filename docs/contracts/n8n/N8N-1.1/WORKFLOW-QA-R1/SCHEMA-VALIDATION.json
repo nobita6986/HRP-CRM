@@ -1,0 +1,84 @@
+{
+  "total": 7,
+  "pass": 7,
+  "fail": 0,
+  "results": [
+    {
+      "kind": "reminder",
+      "nextActionId": "na-002",
+      "commandId": "cmd-rem-20260926-na-002-SUPERVISOR-r3",
+      "commandName": "sendSyntheticReminder",
+      "operationOp": "sendSyntheticReminder",
+      "commandNameMatchesOp": true,
+      "pass": true,
+      "errors": null
+    },
+    {
+      "kind": "reminder",
+      "nextActionId": "na-001",
+      "commandId": "cmd-rem-20260926-na-001-OWNER-r3",
+      "commandName": "sendSyntheticReminder",
+      "operationOp": "sendSyntheticReminder",
+      "commandNameMatchesOp": true,
+      "pass": true,
+      "errors": null
+    },
+    {
+      "kind": "reminder",
+      "nextActionId": "na-006",
+      "commandId": "cmd-rem-20260926-na-006-OWNER-r3",
+      "commandName": "sendSyntheticReminder",
+      "operationOp": "sendSyntheticReminder",
+      "commandNameMatchesOp": true,
+      "pass": true,
+      "errors": null
+    },
+    {
+      "kind": "ack",
+      "nextActionId": "na-002",
+      "commandId": "cmd-ack-20260926-na-002-SUPERVISOR-r3",
+      "commandName": "acknowledgeReminder",
+      "operationOp": "acknowledgeReminder",
+      "commandNameMatchesOp": true,
+      "pass": true,
+      "errors": null
+    },
+    {
+      "kind": "ack",
+      "nextActionId": "na-001",
+      "commandId": "cmd-ack-20260926-na-001-OWNER-r3",
+      "commandName": "acknowledgeReminder",
+      "operationOp": "acknowledgeReminder",
+      "commandNameMatchesOp": true,
+      "pass": true,
+      "errors": null
+    },
+    {
+      "kind": "ack",
+      "nextActionId": "na-006",
+      "commandId": "cmd-ack-20260926-na-006-OWNER-r3",
+      "commandName": "acknowledgeReminder",
+      "operationOp": "acknowledgeReminder",
+      "commandNameMatchesOp": true,
+      "pass": true,
+      "errors": null
+    },
+    {
+      "kind": "ack",
+      "nextActionId": "na-005",
+      "commandId": "cmd-ack-20260926-na-005-NONE-r3",
+      "commandName": "acknowledgeReminder",
+      "operationOp": "acknowledgeReminder",
+      "commandNameMatchesOp": true,
+      "pass": true,
+      "errors": null
+    }
+  ],
+  "na005Invariants": {
+    "routingFALLBACK": true,
+    "notificationOutcomeSKIPPED": true,
+    "reminderRevisionIdIsNone": true,
+    "reasonIsNoOwnerOrSupervisor": true,
+    "reasonNotInEnvelope": true
+  }
+}
