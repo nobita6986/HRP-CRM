@@ -606,3 +606,97 @@ test('receiver: detectBodyScopeSpoof — body provider khác path', () => {
 test('receiver: dedupe.commitWebhookReceipt is function (real DB via int test)', () => {
   assert.equal(typeof dedupe.commitWebhookReceipt, 'function');
 });
+
+// B.02-PREP delta tests - Chatwoot POC paths in protocol-fixture parser
+// Scope: parse layer only (no DB, no dispatch, no canonical mutation)
+
+test('B.02-PREP: Chatwoot message_updated - two revisions, same message.id, distinct eventId', () => {
+  const rev1 = JSON.stringify({ event: 'message_updated', id: 'evt-rev1-cw-00112345678', message: { id: 9001, content: 'v1' } });
+  const rev2 = JSON.stringify({ event: 'message_updated', id: 'evt-rev2-cw-00112345678', message: { id: 9001, content: 'v2' } });
+  const a = protocol.parseProviderFixture('CHATWOOT', new TextEncoder().encode(rev1));
+  const b = protocol.parseProviderFixture('CHATWOOT', new TextEncoder().encode(rev2));
+  assert.equal(a.ok, true);
+  assert.equal(b.ok, true);
+  if (a.ok && b.ok) {
+    assert.equal(a.eventType, 'message_updated');
+    assert.equal(b.eventType, 'message_updated');
+    assert.notEqual(a.eventId, b.eventId);
+  }
+});
+
+test('B.02-PREP: Chatwoot private_note - eventId is event occurrence id, not message id', () => {
+  const body = JSON.stringify({
+    event: 'message_created',
+    id: 'evt-pn-cw-00112345678',
+    message: { id: 9002, content: 'note', sender: { type: 'PRIVATE_NOTE', name: 'staff-a' } },
+  });
+  const out = protocol.parseProviderFixture('CHATWOOT', new TextEncoder().encode(body));
+  assert.equal(out.ok, true);
+  if (out.ok) {
+    assert.equal(out.eventId, 'evt-pn-cw-00112345678');
+    assert.equal(out.eventIdSource, 'primary');
+  }
+});
+
+test('B.02-PREP: Chatwoot echo (outgoing) - distinct from inbound dedupe', () => {
+  const ib = JSON.stringify({
+    event: 'message_created',
+    id: 'evt-in-cw-00112345678',
+    message: { id: 9003, sender: { type: 'INCOMING' } },
+  });
+  const ec = JSON.stringify({
+    event: 'message_created',
+    id: 'evt-echo-cw-00112345678',
+    message: { id: 9003, sender: { type: 'OUTGOING' } },
+  });
+  const a = protocol.parseProviderFixture('CHATWOOT', new TextEncoder().encode(ib));
+  const b = protocol.parseProviderFixture('CHATWOOT', new TextEncoder().encode(ec));
+  assert.equal(a.ok, true);
+  assert.equal(b.ok, true);
+  if (a.ok && b.ok) {
+    assert.notEqual(a.eventId, b.eventId);
+    assert.equal(a.eventType, b.eventType);
+  }
+});
+
+test('B.02-PREP: synthetic event does not auto-mutate canonical (parser is pure, no I/O)', () => {
+  const body = JSON.stringify({
+    event: 'message_created',
+    id: 'evt-pure-cw-00112345678',
+    message: { id: 9004 },
+  });
+  const calls = Array.from({ length: 5 }, () =>
+    protocol.parseProviderFixture('CHATWOOT', new TextEncoder().encode(body)),
+  );
+  for (const c of calls) {
+    assert.equal(c.ok, true);
+    if (c.ok) {
+      assert.equal(c.eventId, 'evt-pure-cw-00112345678');
+      assert.equal(c.eventIdSource, 'primary');
+    }
+  }
+  const digest = protocol.computePayloadDigest(new TextEncoder().encode(body));
+  assert.match(digest, /^[a-f0-9]{64}$/);
+});
+
+test('B.02-PREP: conversation_status_changed - distinct eventId, no message required', () => {
+  const body = JSON.stringify({
+    event: 'conversation_status_changed',
+    id: 'evt-csc-cw-00112345678',
+    conversation: { id: 7001 },
+  });
+  const out = protocol.parseProviderFixture('CHATWOOT', new TextEncoder().encode(body));
+  assert.equal(out.ok, true);
+  if (out.ok) assert.equal(out.eventId, 'evt-csc-cw-00112345678');
+});
+
+test('B.02-PREP: webwidget_triggered - entry-point event, not a message', () => {
+  const body = JSON.stringify({
+    event: 'webwidget_triggered',
+    id: 'evt-ww-cw-00112345678',
+    contact: { id: 5001 },
+  });
+  const out = protocol.parseProviderFixture('CHATWOOT', new TextEncoder().encode(body));
+  assert.equal(out.ok, true);
+  if (out.ok) assert.equal(out.eventId, 'evt-ww-cw-00112345678');
+});
