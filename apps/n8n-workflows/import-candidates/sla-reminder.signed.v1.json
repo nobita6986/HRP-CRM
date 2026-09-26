@@ -1,0 +1,373 @@
+{
+  "name": "n8n-1.1-sla-reminder-crm-signed",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "minutes", "minutesInterval": 15 }
+          ]
+        }
+      },
+      "id": "trigger-schedule-15m",
+      "name": "Schedule Trigger (every 15m)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 200],
+      "disabled": false,
+      "notesInFlow": false,
+      "notes": "Synth reminder schedule. Trigger label TICK_15M. NO credentials/secrets stored in workflow JSON. Signing uses the hrpAutomationSigner node + hrpAutomationLegacySignature credential (N8N/1.1)."
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "cronExpression", "cronExpression": "0 0 9 * * *" }
+          ]
+        }
+      },
+      "id": "trigger-daily-digest-0900",
+      "name": "Schedule Trigger (daily digest 09:00 ICT)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 360],
+      "disabled": false,
+      "notesInFlow": false,
+      "notes": "Daily morning digest. Same downstream flow as 15-min trigger. The 15-min tick and the daily digest converge to the same idempotency key per (nextActionId, day, audience, workflowRevision) so AC #15 holds. Signing path is via hrpAutomationSigner."
+    },
+    {
+      "parameters": {
+        "functionCode": "const slug = (s) => String(s || '').replace(/[^A-Za-z0-9._:-]/g, '').slice(0, 128);\nconst minuteBucket = $now.toUTC().toISO().slice(0, 16).replace(/[-:T]/g, '');\nconst triggerLabel = ($env.N8N_TRIGGER_LABEL || 'TICK_15M');\nconst stableSeed = [slug($workflow.id), String($workflow.revision || 3), slug($execution.id), triggerLabel, minuteBucket].join('|');\nfunction fnv1a(s) {\n  let h = 0xcbf29ce484222325n;\n  const prime = 0x100000001b3n;\n  for (let i = 0; i < s.length; i++) { h = (h ^ BigInt(s.charCodeAt(i))) & 0xffffffffffffffffn; h = (h * prime) & 0xffffffffffffffffn; }\n  return h.toString(16).padStart(16, '0');\n}\nconst correlationId = 'corr-' + fnv1a(stableSeed);\nconst idemWindow = 'sla-' + triggerLabel.toLowerCase().replace(/[^a-z0-9_-]/g,'') + '-' + minuteBucket;\nconst envelope = {\n  schemaVersion: '1',\n  commandId: ('cmd-' + idemWindow).slice(0, 64),\n  commandName: 'listDueNextActions',\n  idempotencyKey: idemWindow,\n  correlationId: correlationId,\n  organizationId: $env.HRP_AUTOMATION_ORG_ID,\n  connectionId: $env.HRP_AUTOMATION_CONN_ID,\n  serviceId: $env.HRP_AUTOMATION_SERVICE_ID,\n  source: { kind: 'HRP_UI', provider: 'HRP_UI', connectionId: null },\n  actor: { kind: 'SERVICE', serviceId: $env.HRP_AUTOMATION_SERVICE_ID },\n  occurredAt: $now.toUTC().toISO(),\n  automationSource: {\n    kind: 'N8N_AUTOMATION',\n    workflowId: slug($workflow.id),\n    workflowRevision: 3,\n    n8nExecutionId: slug($execution.id),\n    workflowLabel: 'sla-reminder-crm',\n    sourceEventId: triggerLabel\n  },\n  operation: { op: 'listDueNextActions', payload: { schemaVersion: '1', statusFilter: 'OPEN_OR_DUE', pageSize: 200 } }\n};\nreturn [{ json: { envelope: envelope, rawBody: JSON.stringify(envelope), triggerLabel: triggerLabel } }];\n"
+      },
+      "id": "function-build-envelope",
+      "name": "Build envelope (listDueNextActions)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [460, 280],
+      "disabled": false,
+      "notesInFlow": false,
+      "notes": "N8N/1.1: envelope includes connectionId and serviceId at the top level (the legacy signer hashes them via the scopeKey). No raw PII or secret. Window key is the UTC-minute bucket. correlationId is derived from stable fields only."
+    },
+    {
+      "parameters": {
+        "envelope": "={{ JSON.stringify($json.envelope) }}",
+        "credentialName": "hrpAutomationLegacySignature"
+      },
+      "id": "signer-list",
+      "name": "Sign envelope (listDueNextActions)",
+      "type": "n8n-nodes-hrp-signer.hrpAutomationSigner",
+      "typeVersion": 1,
+      "position": [680, 280],
+      "disabled": false,
+      "notesInFlow": false,
+      "notes": "N8N/1.1 custom signer node. Resolves the hrpAutomationLegacySignature credential at execution time. Output: headers (4 X-Hrp-Automation-* entries) + envelope echo + signerProfile marker. NO secret persists in workflow JSON, output items, or execution data."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.HRP_AUTOMATION_GATEWAY_URL}}/v1/automation/dispatch",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "X-Hrp-Automation-Service-Id", "value": "={{$node[\"Sign envelope (listDueNextActions)\"].json.output.headers['X-Hrp-Automation-Service-Id']}}" },
+            { "name": "X-Hrp-Automation-Organization-Id", "value": "={{$node[\"Sign envelope (listDueNextActions)\"].json.output.headers['X-Hrp-Automation-Organization-Id']}}" },
+            { "name": "X-Hrp-Automation-Connection-Id", "value": "={{$node[\"Sign envelope (listDueNextActions)\"].json.output.headers['X-Hrp-Automation-Connection-Id']}}" },
+            { "name": "X-Hrp-Automation-Signature", "value": "={{$node[\"Sign envelope (listDueNextActions)\"].json.output.headers['X-Hrp-Automation-Signature']}}" },
+            { "name": "X-Automation-Source", "value": "n8n" },
+            { "name": "X-Automation-Workflow", "value": "={{$json.envelope.automationSource.workflowId}}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{$json.envelope}}",
+        "options": {
+          "timeout": 5000,
+          "response": { "response": { "neverError": true, "responseFormat": "json" } }
+        },
+        "authentication": { "type": "none" }
+      },
+      "id": "http-call-gateway-list",
+      "name": "POST /v1/automation/dispatch (listDueNextActions)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 280],
+      "disabled": false,
+      "notesInFlow": false,
+      "notes": "N8N/1.1: the four X-Hrp-Automation-* headers come from the signer node output. authentication.type='none' (no built-in HMAC type in n8n); signing happens upstream in the hrpAutomationSigner node."
+    },
+    {
+      "parameters": {
+        "functionCode": "const __in = $input.first().json || {};\nconst items = (__in.items || (__in.data && __in.data.items)) || [];\nconst triggerLabel = ($node[\"Build envelope (listDueNextActions)\"].json.triggerLabel || 'TICK_15M');\nconst orgId = ($node[\"Build envelope (listDueNextActions)\"].json.envelope.organizationId) || 'unknown-org';\nconst correlationId = $node[\"Build envelope (listDueNextActions)\"].json.envelope.correlationId;\nlet supervisorMap = {};\ntry { supervisorMap = JSON.parse($env.N8N_FIXTURE_SUPERVISOR_MAP || '{}'); } catch (_e) { supervisorMap = {}; }\nconst now = Date.parse($now.toUTC().toISO());\nconst filtered = [];\nfor (const it of items) {\n  if (!it || !it.nextActionId) continue;\n  if (it.status !== 'OPEN') continue;\n  if (it.snoozeMode === 'SNOOZED') continue;\n  const dt = Date.parse(it.dueAt) - now;\n  let slaBucket;\n  if (dt <= 0) slaBucket = 'OVERDUE';\n  else if (dt <= 60 * 60 * 1000) slaBucket = 'DUE_SOON';\n  else continue;\n  filtered.push({\n    nextActionId: it.nextActionId,\n    organizationId: orgId,\n    assignedToRedacted: it.assignedToRedacted || null,\n    supervisorRedacted: (supervisorMap[it.assignedToRedacted] || it.supervisorRedacted || null),\n    slaBucket: slaBucket,\n    dueAt: it.dueAt\n  });\n}\nfiltered.sort((a, b) => {\n  if (a.dueAt !== b.dueAt) return a.dueAt < b.dueAt ? -1 : 1;\n  return a.nextActionId < b.nextActionId ? -1 : (a.nextActionId > b.nextActionId ? 1 : 0);\n});\nconst routed = filtered.map((it) => {\n  const escalate = it.slaBucket === 'OVERDUE' && it.supervisorRedacted && it.supervisorRedacted !== 'NONE';\n  const audience = escalate ? 'SUPERVISOR' : 'OWNER';\n  const recipient = escalate ? it.supervisorRedacted : it.assignedToRedacted;\n  const routing = (!recipient || recipient === 'NONE') ? 'FALLBACK' : 'SEND';\n  return {\n    nextActionId: it.nextActionId,\n    organizationId: it.organizationId,\n    slaBucket: it.slaBucket,\n    audience: audience,\n    recipientRedacted: routing === 'FALLBACK' ? null : recipient,\n    routing: routing,\n    dueAt: it.dueAt\n  };\n});\nreturn [{ json: { triggerLabel: triggerLabel, correlationId: correlationId, organizationId: orgId, totalSeen: items.length, totalKept: routed.length, items: routed, noItems: items.length === 0 } }];\n"
+      },
+      "id": "function-group",
+      "name": "Filter + Group (snooze, slaBucket, per-nextActionId)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1120, 280],
+      "disabled": false,
+      "notesInFlow": false,
+      "notes": "C-N11-02: emits one item per nextActionId, sorted by (dueAt, nextActionId). C-N11-01: classifies each item as routing = SEND | FALLBACK so the downstream Switch can pick exactly one ack-builder."
+    },
+    {
+      "parameters": {
+        "functionCode": "const upstream = $input.first().json || {};\nconst items = upstream.items || [];\nconst dayKey = $now.toUTC().toISO().slice(0, 10).replace(/[-]/g, '');\nconst workflowRevision = $env.N8N_WORKFLOW_REVISION || '3';\nconst correlationId = upstream.correlationId;\nconst organizationId = upstream.organizationId;\nconst out = [];\nfor (const it of items) {\n  const day = dayKey;\n  const aud = it.audience;\n  const rev = workflowRevision;\n  const idem = 'rem-' + day + '-' + it.nextActionId + '-' + aud + '-r' + rev;\n  const ackBase = 'ack-' + day + '-' + it.nextActionId + '-' + aud + '-r' + rev;\n  const reminderRevisionId = 'rev-' + day + '-' + aud + '-r' + rev;\n  if (it.routing === 'FALLBACK') {\n    out.push({ json: { kind: 'fallback', logicalId: it.nextActionId + '|' + aud + '|' + day, nextActionId: it.nextActionId, audience: aud, slaBucket: it.slaBucket, organizationId: organizationId, correlationId: correlationId, ackBase: ackBase, reminderRevisionId: reminderRevisionId, reason: 'no_owner_or_supervisor' } });\n    continue;\n  }\n  out.push({\n    json: {\n      kind: 'send',\n      logicalId: it.nextActionId + '|' + aud + '|' + day,\n      envelope: {\n        schemaVersion: '1',\n        commandId: ('cmd-' + idem).slice(0, 64),\n        commandName: 'sendSyntheticReminder',\n        idempotencyKey: idem,\n        correlationId: correlationId,\n        organizationId: organizationId,\n        connectionId: $env.HRP_AUTOMATION_CONN_ID,\n        serviceId: $env.HRP_AUTOMATION_SERVICE_ID,\n        source: { kind: 'HRP_UI', provider: 'HRP_UI', connectionId: null },\n        actor: { kind: 'SERVICE', serviceId: $env.HRP_AUTOMATION_SERVICE_ID },\n        automationSource: { kind: 'N8N_AUTOMATION', workflowId: ($workflow.id), workflowRevision: parseInt(workflowRevision, 10), n8nExecutionId: ($execution.id), workflowLabel: 'sla-reminder-crm' },\n        operation: { op: 'sendSyntheticReminder', payload: { schemaVersion: '1', nextActionId: it.nextActionId, audienceKind: aud, redactedRecipientId: it.recipientRedacted, channel: 'DASHBOARD_ONLY', reminderRevisionId: reminderRevisionId } }\n      },\n      ackBase: ackBase,\n      reminderRevisionId: reminderRevisionId,\n      nextActionId: it.nextActionId,\n      audience: aud,\n      slaBucket: it.slaBucket,\n      organizationId: organizationId,\n      correlationId: correlationId\n    }\n  });\n}\nreturn out;\n"
+      },
+      "id": "function-build-send",
+      "name": "Build sendSyntheticReminder batches",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1340, 280],
+      "disabled": false,
+      "notesInFlow": false,
+      "notes": "C-N11-02: one item per nextActionId. C-N11-03: ackBase derived from stable fields; no Date.now / Math.random. Top-level connectionId/serviceId added for signer compatibility (N8N/1.1)."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "conditions": [ { "id": "cond-kind-send", "leftValue": "={{$json.kind}}", "rightValue": "send", "operator": { "type": "string", "operation": "equals" } } ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "switch-route",
+      "name": "Switch routing (SEND vs FALLBACK)",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [1560, 280],
+      "disabled": false,
+      "notesInFlow": false,
+      "notes": "C-N11-01: IF/Switch picks exactly one downstream branch per item. Index 0 = SEND, Index 1 = FALLBACK. The two branches converge ONCE into Build acknowledgement batches."
+    },
+    {
+      "parameters": {
+        "envelope": "={{ JSON.stringify($json.envelope) }}",
+        "credentialName": "hrpAutomationLegacySignature"
+      },
+      "id": "signer-send",
+      "name": "Sign envelope (sendSyntheticReminder)",
+      "type": "n8n-nodes-hrp-signer.hrpAutomationSigner",
+      "typeVersion": 1,
+      "position": [1780, 200],
+      "disabled": false,
+      "notesInFlow": false,
+      "notes": "N8N/1.1 custom signer node. Secret resolved from the credential store, never stored in the workflow JSON or item output."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.HRP_AUTOMATION_GATEWAY_URL}}/v1/automation/dispatch",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "X-Hrp-Automation-Service-Id", "value": "={{$node[\"Sign envelope (sendSyntheticReminder)\"].json.output.headers['X-Hrp-Automation-Service-Id']}}" },
+            { "name": "X-Hrp-Automation-Organization-Id", "value": "={{$node[\"Sign envelope (sendSyntheticReminder)\"].json.output.headers['X-Hrp-Automation-Organization-Id']}}" },
+            { "name": "X-Hrp-Automation-Connection-Id", "value": "={{$node[\"Sign envelope (sendSyntheticReminder)\"].json.output.headers['X-Hrp-Automation-Connection-Id']}}" },
+            { "name": "X-Hrp-Automation-Signature", "value": "={{$node[\"Sign envelope (sendSyntheticReminder)\"].json.output.headers['X-Hrp-Automation-Signature']}}" },
+            { "name": "X-Automation-Correlation-Id", "value": "={{$json.envelope.correlationId}}" }
+          ]
+        },
+        "specifyBody": "json",
+        "jsonBody": "={{$json.envelope}}",
+        "options": { "timeout": 5000, "response": { "response": { "neverError": true, "responseFormat": "json" } } },
+        "authentication": { "type": "none" }
+      },
+      "id": "http-send-reminder",
+      "name": "POST /v1/automation/dispatch (sendSyntheticReminder)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 200],
+      "disabled": false,
+      "notesInFlow": false,
+      "notes": "N8N/1.1: signed headers come from the upstream hrpAutomationSigner node."
+    },
+    {
+      "parameters": {
+        "functionCode": "const upstream = $input.first().json || {};\nconst envelope = upstream.envelope;\nconst wire = upstream.wireStatus;\nconst outcome = wire === 'APPLIED' ? 'SENT' : (wire === 'SKIPPED' ? 'SKIPPED' : 'FAILED');\nreturn [{ json: { source: 'send', logicalId: upstream.logicalId, correlationId: envelope.correlationId, organizationId: envelope.organizationId, nextActionId: upstream.nextActionId, audience: upstream.audience, slaBucket: upstream.slaBucket, notificationOutcome: outcome, reminderRevisionId: upstream.reminderRevisionId, ackBase: upstream.ackBase, sendIdempotencyKey: envelope.idempotencyKey, sendExecutionId: envelope.automationSource.n8nExecutionId, sendCorrelationId: envelope.correlationId } }];\n"
+      },
+      "id": "function-build-ack-from-send",
+      "name": "Build ack from send",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [2220, 200],
+      "disabled": false,
+      "notesInFlow": false,
+      "notes": "C-N11-03: ackBase is deterministic and propagated from the send envelope."
+    },
+    {
+      "parameters": {
+        "functionCode": "const fb = $input.first().json || {};\nreturn [{ json: { source: 'fallback', logicalId: fb.logicalId, correlationId: fb.correlationId, organizationId: fb.organizationId, nextActionId: fb.nextActionId, audience: fb.audience, slaBucket: fb.slaBucket, notificationOutcome: 'SKIPPED', reminderRevisionId: fb.reminderRevisionId, ackBase: fb.ackBase, reason: fb.reason } }];\n"
+      },
+      "id": "function-build-ack-from-fallback",
+      "name": "Build ack from fallback",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [2220, 360],
+      "disabled": false,
+      "notesInFlow": false,
+      "notes": "C-N11-03: deterministic ackBase derived from (nextActionId, day, audience). No Date.now / Math.random."
+    },
+    {
+      "parameters": {
+        "functionCode": "const items = $input.all();\nconst seen = {};\nconst out = [];\nfor (const it of items) {\n  const j = it.json || {};\n  if (!j.ackBase) continue;\n  if (seen[j.ackBase]) continue;\n  seen[j.ackBase] = true;\n  out.push({\n    json: {\n      envelope: {\n        schemaVersion: '1',\n        commandId: ('cmd-ack-' + j.ackBase).slice(0, 64),\n        commandName: 'acknowledgeReminder',\n        idempotencyKey: j.ackBase,\n        correlationId: j.correlationId,\n        organizationId: j.organizationId,\n        connectionId: $env.HRP_AUTOMATION_CONN_ID,\n        serviceId: $env.HRP_AUTOMATION_SERVICE_ID,\n        source: { kind: 'HRP_UI', provider: 'HRP_UI', connectionId: null },\n        actor: { kind: 'SERVICE', serviceId: $env.HRP_AUTOMATION_SERVICE_ID },\n        automationSource: { kind: 'N8N_AUTOMATION', workflowId: ($workflow.id), workflowRevision: parseInt($env.N8N_WORKFLOW_REVISION || '3', 10), n8nExecutionId: ($execution.id), workflowLabel: 'sla-reminder-crm' },\n        operation: { op: 'acknowledgeReminder', payload: { schemaVersion: '1', nextActionId: j.nextActionId, notificationOutcome: j.notificationOutcome, reminderRevisionId: j.reminderRevisionId, channel: 'DASHBOARD_ONLY' } }\n      },\n      source: j.source,\n      logicalId: j.logicalId\n    }\n  });\n}\nreturn out;\n"
+      },
+      "id": "function-build-ack",
+      "name": "Build acknowledgement batches",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [2440, 280],
+      "disabled": false,
+      "notesInFlow": false,
+      "notes": "C-N11-01: both branches converge here. C-N11-03: dedupe guard on ackBase ensures one ack per logical reminder. Top-level connectionId/serviceId added for signer compatibility (N8N/1.1)."
+    },
+    {
+      "parameters": {
+        "envelope": "={{ JSON.stringify($json.envelope) }}",
+        "credentialName": "hrpAutomationLegacySignature"
+      },
+      "id": "signer-ack",
+      "name": "Sign envelope (acknowledgeReminder)",
+      "type": "n8n-nodes-hrp-signer.hrpAutomationSigner",
+      "typeVersion": 1,
+      "position": [2660, 280],
+      "disabled": false,
+      "notesInFlow": false,
+      "notes": "N8N/1.1 custom signer node. Secret resolved from the credential store, never stored in the workflow JSON or item output."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.HRP_AUTOMATION_GATEWAY_URL}}/v1/automation/dispatch",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "X-Hrp-Automation-Service-Id", "value": "={{$node[\"Sign envelope (acknowledgeReminder)\"].json.output.headers['X-Hrp-Automation-Service-Id']}}" },
+            { "name": "X-Hrp-Automation-Organization-Id", "value": "={{$node[\"Sign envelope (acknowledgeReminder)\"].json.output.headers['X-Hrp-Automation-Organization-Id']}}" },
+            { "name": "X-Hrp-Automation-Connection-Id", "value": "={{$node[\"Sign envelope (acknowledgeReminder)\"].json.output.headers['X-Hrp-Automation-Connection-Id']}}" },
+            { "name": "X-Hrp-Automation-Signature", "value": "={{$node[\"Sign envelope (acknowledgeReminder)\"].json.output.headers['X-Hrp-Automation-Signature']}}" },
+            { "name": "X-Automation-Correlation-Id", "value": "={{$json.envelope.correlationId}}" }
+          ]
+        },
+        "specifyBody": "json",
+        "jsonBody": "={{$json.envelope}}",
+        "options": { "timeout": 5000, "response": { "response": { "neverError": true, "responseFormat": "json" } } },
+        "authentication": { "type": "none" }
+      },
+      "id": "http-ack",
+      "name": "POST /v1/automation/dispatch (acknowledgeReminder)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2880, 280],
+      "disabled": false,
+      "notesInFlow": false,
+      "notes": "N8N/1.1: signed headers come from the upstream hrpAutomationSigner node."
+    },
+    {
+      "parameters": {
+        "content": "## n8n/1.1 — SLA Reminder (SIGNED variant, LOCAL/MOCK PoC, worktree n8n11-r1)\n\n### Status\nSigned variant of the N8N/1.0 SLA reminder. workflowRevision=3. Uses the private custom node package `n8n-nodes-hrp-signer` (hrpAutomationSigner + hrpAutomationLegacySignature credential). Secret lives in n8n credential store ONLY.\n\n### Known divergence from current gateway (Sep 2026)\nThe current build of apps/integration-api/src/automation/gateway.ts computes the digest via `payloadDigestHex(canonicalJson(stripped))` which double-canonicalises the envelope (gateway digest is SHA-256(canonical(canonical(stripped)))). The N8N/0.2 CONTRACT.md §1 mandates `SHA-256(canonicalJson(stripped))` (single canonical). The signer follows the contract; the gateway needs a one-line change to `payloadDigestHex(stripped)` for the live round-trip to verify.\nThis workflow can be imported but VERIFICATION at /v1/automation/dispatch will yield 401 until the gateway is aligned. Local tests under tools/n8n-nodes-hrp-signer/test/* all pass without the gateway.\n\n### Flow (per item)\n  1. Trigger: 15-min tick OR daily 09:00 ICT digest.\n  2. Build envelope (listDueNextActions). Top-level connectionId/serviceId + correlationId + workflowRevision=3.\n  3. Sign envelope (listDueNextActions) -> hrpAutomationSigner reads credential store.\n  4. POST /v1/automation/dispatch (list) with the four X-Hrp-Automation-* headers.\n  5. Filter snoozeMode==SNOOZED and status!=OPEN; bucket DUE_SOON / OVERDUE.\n     Sort by (dueAt, nextActionId). Emit ONE item per nextActionId.\n  6. Build sendSyntheticReminder batches -> emit kind=send or kind=fallback per item.\n  7. Switch routing: kind=send -> Sign envelope (send) -> POST /v1/automation/dispatch (send) -> Build ack from send.\n     kind=fallback -> Build ack from fallback (no HTTP send call).\n  8. Build acknowledgement batches (dedupe by ackBase) -> Sign envelope (acknowledgeReminder) -> POST /v1/automation/dispatch (acknowledgeReminder).\n\n### Boundaries\n  - body organizationId is NEVER authority; registry-resolved org/conn wins.\n  - Workflow never mutates NextAction state, Handling SLA, canonical state.\n  - Snooze affects notification ONLY; SLA/canonical unchanged.\n  - Idempotency keys derived from (nextActionId, day, audience, workflowRevision). No Date.now() / Math.random().\n  - Logs are redacted; no secret, signature, raw body, PII.\n  - Synthetic channel only (DASHBOARD_ONLY); no email/SMS/Zalo/Chatwoot.\n  - One acknowledgement per logical reminder (dedupe by ackBase).\n  - Reorder-safe: items are sorted by (dueAt, nextActionId) before key derivation.\n  - Secret lives in n8n credential store ONLY (hrpAutomationLegacySignature credential). NEVER in workflow JSON, output items, logs, or execution data.\n\n### Local only\n  - active=false. n8n-crm will not start the workflow until T0 issues the import command and operator provisions env vars + the n8n-nodes-hrp-signer npm package.\n  - DO NOT IMPORT into a production n8n CRM instance until T0/T1 approves.\n  - JSON_STRUCTURE_VERIFIED, LOCAL_TESTS_PASS (35 pass + 1 skip + 1 diagnostic), N8N_RUNTIME_NOT_EXECUTED.",
+        "height": 420,
+        "width": 520
+      },
+      "id": "sticky-note-signed",
+      "name": "Workflow notes (N8N/1.1 signed)",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [240, 520],
+      "disabled": false,
+      "notesInFlow": false
+    }
+  ],
+  "connections": {
+    "Schedule Trigger (every 15m)": {
+      "main": [ [ { "node": "Build envelope (listDueNextActions)", "type": "main", "index": 0 } ] ]
+    },
+    "Schedule Trigger (daily digest 09:00 ICT)": {
+      "main": [ [ { "node": "Build envelope (listDueNextActions)", "type": "main", "index": 0 } ] ]
+    },
+    "Build envelope (listDueNextActions)": {
+      "main": [ [ { "node": "Sign envelope (listDueNextActions)", "type": "main", "index": 0 } ] ]
+    },
+    "Sign envelope (listDueNextActions)": {
+      "main": [ [ { "node": "POST /v1/automation/dispatch (listDueNextActions)", "type": "main", "index": 0 } ] ]
+    },
+    "POST /v1/automation/dispatch (listDueNextActions)": {
+      "main": [ [ { "node": "Filter + Group (snooze, slaBucket, per-nextActionId)", "type": "main", "index": 0 } ] ]
+    },
+    "Filter + Group (snooze, slaBucket, per-nextActionId)": {
+      "main": [ [ { "node": "Build sendSyntheticReminder batches", "type": "main", "index": 0 } ] ]
+    },
+    "Build sendSyntheticReminder batches": {
+      "main": [ [ { "node": "Switch routing (SEND vs FALLBACK)", "type": "main", "index": 0 } ] ]
+    },
+    "Switch routing (SEND vs FALLBACK)": {
+      "main": [
+        [ { "node": "Sign envelope (sendSyntheticReminder)", "type": "main", "index": 0 } ],
+        [ { "node": "Build ack from fallback", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Sign envelope (sendSyntheticReminder)": {
+      "main": [ [ { "node": "POST /v1/automation/dispatch (sendSyntheticReminder)", "type": "main", "index": 0 } ] ]
+    },
+    "POST /v1/automation/dispatch (sendSyntheticReminder)": {
+      "main": [ [ { "node": "Build ack from send", "type": "main", "index": 0 } ] ]
+    },
+    "Build ack from send": {
+      "main": [ [ { "node": "Build acknowledgement batches", "type": "main", "index": 0 } ] ]
+    },
+    "Build ack from fallback": {
+      "main": [ [ { "node": "Build acknowledgement batches", "type": "main", "index": 1 } ] ]
+    },
+    "Build acknowledgement batches": {
+      "main": [ [ { "node": "Sign envelope (acknowledgeReminder)", "type": "main", "index": 0 } ] ]
+    },
+    "Sign envelope (acknowledgeReminder)": {
+      "main": [ [ { "node": "POST /v1/automation/dispatch (acknowledgeReminder)", "type": "main", "index": 0 } ] ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "timezone": "Asia/Ho_Chi_Minh",
+    "errorWorkflow": "n8n-error-notifier-TBD"
+  },
+  "id": "n8n-sla-reminder-crm-local-mock-signed",
+  "workflowRevision": 3,
+  "signerProfile": {
+    "kind": "LEGACY_SHA256_INPUT_SECRET",
+    "algorithm": "sha256(signingInput || secret)",
+    "version": 1,
+    "nodeType": "n8n-nodes-hrp-signer.hrpAutomationSigner",
+    "credentialType": "n8n-nodes-hrp-signer.hrpAutomationLegacySignature",
+    "secretStorage": "n8n credential store only (NEVER in workflow JSON, output items, logs, trace)",
+    "headers": [
+      "X-Hrp-Automation-Service-Id",
+      "X-Hrp-Automation-Organization-Id",
+      "X-Hrp-Automation-Connection-Id",
+      "X-Hrp-Automation-Signature"
+    ],
+    "stripNonDigestFields": ["correlationId", "occurredAt", "commandId", "automationSource.n8nExecutionId"]
+  },
+  "meta": {
+    "instanceId": "n8n-crm-instance-TBD",
+    "templateCredsSetupCompleted": false
+  },
+  "tags": [
+    { "name": "n8n-1.1" },
+    { "name": "crm-automation" },
+    { "name": "local-mock" },
+    { "name": "no-import-without-T0" },
+    { "name": "sla-reminder" },
+    { "name": "follow-up" },
+    { "name": "signed" },
+    { "name": "legacy-sha256" },
+    { "name": "not-hmac" }
+  ],
+  "pinData": {}
+}

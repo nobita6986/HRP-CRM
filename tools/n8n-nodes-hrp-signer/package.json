@@ -1,0 +1,35 @@
+{
+  "name": "n8n-nodes-hrp-signer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Private n8n custom node + credential for the HRP-CRM automation gateway. Emits the four X-Hrp-Automation-* headers using the legacy SHA-256(input || secret) profile. NO HMAC primitive is used.",
+  "main": "dist/signer.mjs",
+  "exports": {
+    ".": "./dist/index.mjs",
+    "./signer": "./dist/signer.mjs",
+    "./credential": "./dist/credential.mjs",
+    "./node": "./dist/node.mjs"
+  },
+  "scripts": {
+    "test": "node --test test/",
+    "build": "node scripts/copy.mjs",
+    "prepare": "node scripts/copy.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {},
+  "devDependencies": {},
+  "files": [
+    "dist/",
+    "README.md"
+  ],
+  "n8n": {
+    "nodes": [
+      "dist/node.mjs#HrpAutomationSigner"
+    ],
+    "credentials": [
+      "dist/credential.mjs#HrpAutomationLegacySignatureCredential"
+    ]
+  }
+}

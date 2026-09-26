@@ -1,0 +1,27 @@
+# N8N/1.1-SIGNER manifest -- raw SHA-256 over committed blobs
+# Format: each blob's `<sha256>  <repo-relative-path>`.
+# Round: N8N/1.1-SIGNER (READ_ONLY signer package + inactive import candidate).
+
+f8159f10bf0577202eebf637bcd0446d684a632220ce0dd1580145a6b7861953  docs/contracts/n8n/N8N-1.1-SIGNER/CONTRACT.md
+4dd96dce963c70fed7e498867d6181d2c412d9d95d88814d6a3b0dbbe7c5e9d0  docs/contracts/n8n/N8N-1.1-SIGNER/HANDOFF.md
+6de2168fc726eddb02b03f1a5a454e5ad624a8bd5ddb787dbaa2ecdcde351493  docs/contracts/n8n/N8N-1.1-SIGNER/NEXT-GATE.md
+eb3e8c44fc1dec0bc3c39b4684d448e06ed5de5b5decc295ce7cbccdc06e69fe  docs/contracts/n8n/N8N-1.1-SIGNER/README.md
+7019de1367082e15305e0f7faa2753191d330b5665cbd409b7ff66066d6b12e0  docs/contracts/n8n/N8N-1.1-SIGNER/TESTS.md
+af63671721b521c7727669b6f1110f42dcb45c95716d662829ad8b2b3c54037f  docs/contracts/n8n/N8N-1.1-SIGNER/THREAT-BOUNDARY.md
+510787786c34913645e3b99e6c61fb8556ef45aa03fff060046f70fc688c025d  tools/n8n-nodes-hrp-signer/package.json
+b6f536cb933bfb0b9a5a5a80618a4d85770d2672ce789f6743ae9b578b5f7d70  tools/n8n-nodes-hrp-signer/dist/signer.mjs
+80b5860a51b50977bc19a780cdd928b594eabe1704354b093f08271f890fb281  tools/n8n-nodes-hrp-signer/dist/credential.mjs
+4cb03f36f91463f87203780f71750eed1b7f61ba4adc3e1d3c403a59d0635ec1  tools/n8n-nodes-hrp-signer/dist/node.mjs
+69d608f828b2f8506cc2d5e3ef4990c1de0bed522e458562d4f54b583fb04efa  tools/n8n-nodes-hrp-signer/dist/index.mjs
+e27b8deb78f3f725e837f93bf43d2cb7ebb2b16dc5b8a3915bba5171b0224e1d  tools/n8n-nodes-hrp-signer/test/signer.test.mjs
+38950855322e7c8e820d2bca8ec88c0aa57dec2085f01b21e644850d61e224d0  tools/n8n-nodes-hrp-signer/test/credential.test.mjs
+61bc6acaa6cc9384309dd8f04220d6ad5686ddd17589e632751d88a805413032  tools/n8n-nodes-hrp-signer/test/negative.test.mjs
+39bc60dde26d5acccaf691bba3c0c46ef7ffed59c5392c03855503518503d157  tools/n8n-nodes-hrp-signer/test/round-trip.test.mjs
+731f3de5c3f35149f401ffad1ae5eaea7c6044a9f77dbcdbddac669b028cc77d  tools/n8n-nodes-hrp-signer/test/round-trip-live.test.mjs
+a57ce17fc03c07543857806a655fb6b9f1fc5c0b502ae2ed1626bad74f2b288a  apps/n8n-workflows/import-candidates/sla-reminder.signed.v1.json
+64344c98f7f22702b5dbbaebb9c75fc632acb6b53f822e7f157d8b079e3e8f04  apps/n8n-workflows/local-runner.mjs
+
+# Reference: preceding hygiene commit (N8N/1.1-Round-1 hygiene amendment).
+#   subject: chore(n8n-1.1): hygiene amendment - replace byte NUL in scopeKeyFor join delimiter
+#   commit : 5e02aa8
+#   files  : apps/n8n-workflows/local-runner.mjs (sha above) and manifest digest regenerated.
