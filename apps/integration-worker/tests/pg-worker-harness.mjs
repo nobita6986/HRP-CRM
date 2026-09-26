@@ -52,7 +52,7 @@
 
 import EmbeddedPostgres from 'embedded-postgres';
 import { createPrismaClient } from '@hrp-engagement/integration-store';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import pkg from 'pg';
 import {
@@ -252,12 +252,11 @@ export async function start() {
             // PID still exists. If not, pg_ctl stop will fail with
             // "No such process"; skip to avoid wasted work and to
             // record the real reason for the orphan listener.
-            const pidFilePath = require('node:path').join(validation.dataDir, 'postmaster.pid');
-            const fs = require('node:fs');
+            const pidFilePath = path.join(validation.dataDir, 'postmaster.pid');
             let recordedPid = null;
             try {
-              if (fs.existsSync(pidFilePath)) {
-                const lines = fs.readFileSync(pidFilePath, 'utf8').split(/\r?\n/);
+              if (existsSync(pidFilePath)) {
+                const lines = readFileSync(pidFilePath, 'utf8').split(/\r?\n/);
                 if (lines.length > 0) recordedPid = parseInt(lines[0].trim(), 10);
               }
             } catch {}
