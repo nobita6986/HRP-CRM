@@ -37,6 +37,7 @@ test_results.txt
 .combined*.txt
 .pg-recovery-evidence.txt
 
-# B.02 isolated run / reproducer evidence directories (T1-B)
+# B.02 isolated run / reproducer / cleanup-probe evidence directories (T1-B)
 apps/integration-worker/.b02-evidence/
 apps/integration-worker/.b02-repro/
+apps/integration-worker/.b02-probe/

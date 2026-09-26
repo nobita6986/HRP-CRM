@@ -393,7 +393,12 @@ describe('B.02-LOCAL-E2E: synthetic Chatwoot -> receiver -> worker -> mock gatew
       if (harness) {
         // The harness owns BOTH prisma.$disconnect and pg.stop. Do NOT call
         // prisma.$disconnect separately anywhere else. (C-B02-2 invariant.)
-        await withTimeout('harness_stop', harness.stop(), 10000);
+        //
+        // R4-01: the harness now also polls the suffix port closed after
+        // pg.stop() with a bounded budget. The total teardown time is at
+        // most pg.stop + port-poll-timeout = ~5 s + 15 s = ~20 s, so we
+        // give the outer withTimeout a 30 s ceiling.
+        await withTimeout('harness_stop', harness.stop(), 30000);
       }
     } catch (e) {
       teardownErrors.push({ stage: 'harness_stop', error: (e && e.message) || String(e) });
