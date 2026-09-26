@@ -6,8 +6,11 @@
   "type": "module",
   "main": "dist/server.js",
   "scripts": {
-    "build": "tsc && npm run build:ui",
+    "build": "tsc && npm run build:embed-ui && npm run build:ui",
+    "build:emit": "tsc",
     "build:ui": "node scripts/build-ui.mjs",
+    "build:embed-ui": "node scripts/build-embed-ui.mjs",
+    "clean:embed-ui": "node scripts/clean-embed-ui.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/*.test.mjs",
     "start": "node dist/server.js",

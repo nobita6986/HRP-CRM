@@ -39,6 +39,8 @@ import {
 // CORE/1.B.03-PREP — Embed-host synthetic seam (NOT real Chatwoot / NOT HRP runtime).
 import { handleEmbedTalentContextRead, defaultDeps as defaultEmbedDeps, seedSynthetic } from './embed/server-handler.js';
 import type { EmbedRouteDeps } from './embed/server-handler.js';
+import { guardEmbedSurface, isEmbedSurfacePath } from './embed/route-guard.js';
+import { resolveSafeStaticPath } from './embed/static-resolver.js';
 
 // CORE/1.14 — Observability layer (correlation / metrics / scrub / kill-switch)
 import {
@@ -232,6 +234,18 @@ async function handleRequest(
       dependenciesConnected: false,
       uiRealBackend: false,
     });
+  }
+
+  // ── B.03-PREP: Surface block (C-B03-02 fail-closed) ──────────────────────
+  // When mock mode is off (or nodeEnv is production), every embed-host route
+  // returns 404. Guard runs BEFORE the route dispatch so static + dynamic
+  // surface all share the same gate.
+  const embedConfig = { mockMode: config.mockMode, nodeEnv: config.nodeEnv };
+  if (isEmbedSurfacePath(path)) {
+    const block = guardEmbedSurface(embedConfig);
+    if (block !== null) {
+      return respondJson(res, block.status, block.body, ctx);
+    }
   }
 
   // Serve static UI from dist/ui/
@@ -448,22 +462,50 @@ async function handleRequest(
   }
 
   // ── B.03-PREP: GET /embed-panel/* → synthetic embed-host React bundle ──
+  // C-B03-01: every served HTML is rewritten to pin the bound parent origin
+  // to the origin that EMBEDDED the iframe. We use a query-param hint
+  // (?parentOrigin=http://...) which the embed-panel.tsx mount step validates
+  // against HOST_ALLOWED_ORIGINS before binding. The simulator also passes
+  // this hint explicitly from JS.
+  // C-B03-02: containment is enforced by resolveSafeStaticPath().
   if (path.startsWith('/embed-panel/') && req.method === 'GET') {
-    if (config.nodeEnv === 'production') {
-      return respondJson(res, 403, { error: 'forbidden', message: 'Not available in production.' }, ctx);
-    }
     const sub = path === '/embed-panel/' ? '/index.html' : path.slice('/embed-panel'.length);
-    const filePath = join(process.cwd(), 'dist/embed-ui' + sub);
+    const safeSub = resolveSafeStaticPath('dist/embed-ui', sub);
+    if (safeSub === null) {
+      return respondJson(res, 404, { error: 'not_found', message: 'Not found.' }, ctx);
+    }
+    const filePath = join(process.cwd(), safeSub);
     if (existsSync(filePath)) {
-      const content = readFileSync(filePath);
-      res.statusCode = 200;
       const lower = sub.toLowerCase();
-      res.setHeader('Content-Type',
-        lower.endsWith('.html') ? 'text/html; charset=utf-8' :
-        lower.endsWith('.js') ? 'application/javascript; charset=utf-8' :
-        lower.endsWith('.map') ? 'application/json' :
-        'application/octet-stream');
-      res.end(content);
+      res.statusCode = 200;
+      if (lower.endsWith('.html')) {
+        const referer = req.headers.referer;
+        let parentOrigin = '';
+        if (typeof referer === 'string') {
+          try {
+            const u = new URL(referer);
+            parentOrigin = `${u.protocol}//${u.host}`;
+          } catch { /* ignore */ }
+        }
+        const reqUrl = new URL(req.url ?? '/', 'http://localhost');
+        const explicitParentOrigin = reqUrl.searchParams.get('parentOrigin');
+        if (typeof explicitParentOrigin === 'string' && explicitParentOrigin.length > 0) {
+          parentOrigin = explicitParentOrigin;
+        }
+        const original = readFileSync(filePath, 'utf-8');
+        const injectScript = `<script>window.__HRP_EMBED_PARENT_ORIGIN=${JSON.stringify(parentOrigin)};</script>`;
+        const injected = original.replace('<head>', `<head>${injectScript}`);
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('Content-Security-Policy', `frame-ancestors ${parentOrigin || 'none'};`);
+        res.end(injected);
+      } else {
+        const content = readFileSync(filePath);
+        res.setHeader('Content-Type',
+          lower.endsWith('.js') ? 'application/javascript; charset=utf-8' :
+          lower.endsWith('.map') ? 'application/json' :
+          'application/octet-stream');
+        res.end(content);
+      }
     } else {
       res.statusCode = 404;
       res.end('Not found');
@@ -473,14 +515,13 @@ async function handleRequest(
 
   // ── B.03-PREP: GET /embed-host-simulator → synthetic test harness ─────
   if (path === '/embed-host-simulator' && req.method === 'GET') {
-    if (config.nodeEnv === 'production') {
-      return respondJson(res, 403, { error: 'forbidden', message: 'Not available in production.' }, ctx);
-    }
     const simPath = join(process.cwd(), 'tests/embed-host-simulator.html');
     if (existsSync(simPath)) {
       const content = readFileSync(simPath, 'utf-8');
       res.statusCode = 200;
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      // The simulator page is the parent; pin frame-ancestors to self.
+      res.setHeader('Content-Security-Policy', `frame-ancestors 'self' http://localhost:1550? http://127.0.0.1:1550?;`);
       res.end(content);
     } else {
       res.statusCode = 404;
@@ -514,9 +555,6 @@ async function handleRequest(
 
   // ── B.03-PREP: POST /api/embed/seed → [dev only] seed synthetic session ─
   if (path === '/api/embed/seed' && req.method === 'POST') {
-    if (config.nodeEnv === 'production') {
-      return respondJson(res, 403, { error: 'forbidden', message: 'Not available in production.' }, ctx);
-    }
     const raw = await readRawBodyLimited(req);
     let payload: unknown;
     try {
@@ -558,9 +596,6 @@ async function handleRequest(
 
   // ── B.03-PREP: POST /api/embed/revoke → [dev only] revoke a session ────
   if (path === '/api/embed/revoke' && req.method === 'POST') {
-    if (config.nodeEnv === 'production') {
-      return respondJson(res, 403, { error: 'forbidden', message: 'Not available in production.' }, ctx);
-    }
     const raw = await readRawBodyLimited(req);
     let payload: unknown;
     try {

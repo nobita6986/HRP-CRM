@@ -55,7 +55,7 @@
   <button id="btn-narrow">Panel hẹp (380px)</button>
   <button id="btn-wide">Panel rộng (720px)</button>
 </div>
-<iframe id="panel-frame" src="/embed-panel/" data-testid="panel-frame"></iframe>
+<iframe id="panel-frame" data-testid="panel-frame"></iframe>
 <script>
 (function () {
   'use strict';
@@ -88,6 +88,10 @@
   }
 
   // Capture the iframe contentWindow once it loads.
+  // C-B03-01: bind the iframe to the page origin. The iframe will read this
+  // via ?parentOrigin= (and the panel validates against HOST_ALLOWED_ORIGINS).
+  // The simulator's own origin IS its parent origin (same-origin iframe).
+  frame.src = '/embed-panel/?parentOrigin=' + encodeURIComponent(window.location.origin);
   frame.addEventListener('load', () => {
     lastSourceWindow = frame.contentWindow;
     setState('Panel iframe loaded; ready to send.');

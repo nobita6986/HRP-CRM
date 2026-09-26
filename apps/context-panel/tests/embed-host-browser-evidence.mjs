@@ -236,7 +236,7 @@ async function main() {
       // to denied), then verify the code text.
       await frameHandle.waitForSelector('[data-testid="embed-state-denied"]', { timeout: 8000 });
       const viMessage = await frameHandle.$eval('[data-testid="embed-vi-message"]', (el) => el.textContent || '');
-      const denyCode = await frameHandle.$eval('[data-testid="embed-deny-code"]', (el) => el.textContent || '');
+      const denyCode = await frameHandle.$eval('[data-testid="embed-state-denied"]', (el) => el.getAttribute('data-deny-code') || '');
       await page.screenshot({ path: join(EVIDENCE_DIR, 'b03-prep-03-revoked.png') });
       await recordResult('revoke-clears-context',
         /SESSION_REVOKED|AUTHENTICATION_REQUIRED/.test(denyCode) && viMessage.length > 0,
@@ -254,14 +254,14 @@ async function main() {
       // Use frameHandle.evaluate so the querySelector runs in the iframe's
       // document context (not the outer simulator page).
       await frameHandle.waitForFunction(() => {
-        const el = document.querySelector('[data-testid="embed-deny-code"]');
-        return el && /BAD_ORIGIN|BAD_SOURCE|FORBIDDEN/.test(el.textContent || '');
+        const el = document.querySelector('[data-testid="embed-state-denied"]');
+        return el && /BAD_ORIGIN|BAD_SOURCE|FORBIDDEN|SOURCE_MISMATCH|NOT_WINDOW|ORIGIN_NOT_ALLOWED/.test(el.getAttribute('data-deny-code') || '');
       }, null, { timeout: 8000 });
-      const denyCode = await frameHandle.$eval('[data-testid="embed-deny-code"]', (el) => el.textContent || '');
+      const denyCode = await frameHandle.$eval('[data-testid="embed-state-denied"]', (el) => el.getAttribute('data-deny-code') || '');
       const viMessage = await frameHandle.$eval('[data-testid="embed-vi-message"]', (el) => el.textContent || '');
       await page.screenshot({ path: join(EVIDENCE_DIR, 'b03-prep-04-foreign-origin.png') });
       await recordResult('foreign-origin-rejected',
-        /BAD_ORIGIN|BAD_SOURCE|FORBIDDEN/.test(denyCode) && !viMessage.includes('Ng••') && !viMessage.includes('V••'),
+        /BAD_ORIGIN|BAD_SOURCE|FORBIDDEN|SOURCE_MISMATCH|NOT_WINDOW|ORIGIN_NOT_ALLOWED/.test(denyCode) && !viMessage.includes('Ng••') && !viMessage.includes('V••'),
         { note: `denyCode="${denyCode.trim()}"` });
     }
 
@@ -294,10 +294,10 @@ async function main() {
         });
       });
       await frameHandle.waitForFunction(() => {
-        const el = document.querySelector('[data-testid="embed-deny-code"]');
-        return el && /AUTHENTICATION_REQUIRED|SCHEMA_FAILED|MISSING_SESSION_REF|FORBIDDEN/.test(el.textContent || '');
+        const el = document.querySelector('[data-testid="embed-state-denied"]');
+        return el && /AUTHENTICATION_REQUIRED|SCHEMA_FAILED|MISSING_SESSION_REF|FORBIDDEN/.test(el.getAttribute('data-deny-code') || '');
       }, null, { timeout: 8000 });
-      const denyCode = await frameHandle.$eval('[data-testid="embed-deny-code"]', (el) => el.textContent || '');
+      const denyCode = await frameHandle.$eval('[data-testid="embed-state-denied"]', (el) => el.getAttribute('data-deny-code') || '');
       const viMessage = await frameHandle.$eval('[data-testid="embed-vi-message"]', (el) => el.textContent || '');
       await page.screenshot({ path: join(EVIDENCE_DIR, 'b03-prep-05-missing-session.png') });
       await recordResult('missing-session-denied',
@@ -333,10 +333,10 @@ async function main() {
       }), [ref3]);
       // Wait for the denial to update (previous test may have set SCHEMA_FAILED etc.)
       await frameHandle.waitForFunction(() => {
-        const el = document.querySelector('[data-testid="embed-deny-code"]');
-        return el && /FORBIDDEN_FIELD/.test(el.textContent || '');
+        const el = document.querySelector('[data-testid="embed-state-denied"]');
+        return el && /FORBIDDEN_FIELD/.test(el.getAttribute('data-deny-code') || '');
       }, null, { timeout: 8000 });
-      const denyCode = await frameHandle.$eval('[data-testid="embed-deny-code"]', (el) => el.textContent || '');
+      const denyCode = await frameHandle.$eval('[data-testid="embed-state-denied"]', (el) => el.getAttribute('data-deny-code') || '');
       const viMessage = await frameHandle.$eval('[data-testid="embed-vi-message"]', (el) => el.textContent || '');
       await page.screenshot({ path: join(EVIDENCE_DIR, 'b03-prep-06-forbidden-field.png') });
       await recordResult('forbidden-field-rejected',
@@ -348,10 +348,10 @@ async function main() {
     {
       await page.click('#btn-oversized');
       await frameHandle.waitForFunction(() => {
-        const el = document.querySelector('[data-testid="embed-deny-code"]');
-        return el && /PAYLOAD_TOO_LARGE|SCHEMA_FAILED|FORBIDDEN_FIELD/.test(el.textContent || '');
+        const el = document.querySelector('[data-testid="embed-state-denied"]');
+        return el && /PAYLOAD_TOO_LARGE|SCHEMA_FAILED|FORBIDDEN_FIELD/.test(el.getAttribute('data-deny-code') || '');
       }, null, { timeout: 8000 });
-      const denyCode = await frameHandle.$eval('[data-testid="embed-deny-code"]', (el) => el.textContent || '');
+      const denyCode = await frameHandle.$eval('[data-testid="embed-state-denied"]', (el) => el.getAttribute('data-deny-code') || '');
       await page.screenshot({ path: join(EVIDENCE_DIR, 'b03-prep-07-oversized.png') });
       await recordResult('oversized-payload-rejected',
         /PAYLOAD_TOO_LARGE|SCHEMA_FAILED|FORBIDDEN_FIELD/.test(denyCode),

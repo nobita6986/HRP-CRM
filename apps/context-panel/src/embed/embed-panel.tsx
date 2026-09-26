@@ -1,198 +1,230 @@
 /**
- * src/embed/embed-panel.tsx — B.03-PREP isolated embed-host React panel.
+ * context-panel/src/embed/embed-panel.tsx — B.03-PREP isolated embed-host React panel.
  *
  * Rendered ONLY for the embed-host simulator harness (not the product UI).
- * Listens for inbound postMessage envelopes from the parent, validates
- * origin/source/size/version/denylist, calls /api/embed/talent-context-read,
- * and renders the projection (or denial state) in Vietnamese.
+ *
+ * Strictness (C-B03-01):
+ *   - Mounts by binding to window.parent and the URL-or-injected-hint origin.
+ *     Messages accepted iff BOTH origin in allowlist AND event.source === bound parent.
+ *   - Outbound postMessage uses verifiedParentOrigin as targetOrigin —
+ *     never '*' and never window.location.origin.
+ *
+ * User-visible hygiene (C-B03-04):
+ *   - UI NEVER renders raw error codes / messages / stack / parser detail.
+ *   - Diagnostic codes live in data-* attributes only.
+ *   - Only Vietnamese allowlisted copy is rendered as visible text.
  *
  * SYNTHETIC ONLY. No real Chatwoot / HRP runtime.
  */
 import * as React from 'react';
 import { createRoot } from 'react-dom/client';
-import {
-  parseEnvelope,
-  assertOrigin,
-  isWindowLike,
-  HOST_ALLOWED_ORIGINS,
-  extractAcceptedHint,
-  type Envelope,
-  type ParseResult,
-} from './message-protocol.js';
+import { parseEnvelope, type ParseResult, type Envelope, HOST_ALLOWED_ORIGINS } from './message-protocol.js';
+import { bindChannel, postToParent, type ChannelBinding } from './channel-binding.js';
 import { assertAllowed, type RedactionGuardResult } from './redaction.js';
+import { MESSAGES_VI } from './messages-vi.js';
 
 type PanelState =
   | { kind: 'idle' }
   | { kind: 'loading'; envelope: Envelope }
   | { kind: 'ready'; envelope: Envelope; result: unknown; redaction: RedactionGuardResult }
-  | { kind: 'denied'; envelope: Envelope | null; code: string; detail: string; viMessage: string }
-  | { kind: 'error'; message: string };
+  | { kind: 'denied'; envelope: Envelope | null; viMessage: string; dataDenyCode: string }
+  | { kind: 'error'; viMessage: string; dataErrorDetail: string };
 
-function viMessageFor(code: string): string {
+interface MountProbeWindow {
+  parent?: unknown;
+  location?: { search?: string; origin?: string; href?: string };
+}
+
+function readBoundOrigin(search: string): string | null {
+  const probe = window as unknown as { __HRP_EMBED_PARENT_ORIGIN?: unknown };
+  const hint = typeof probe.__HRP_EMBED_PARENT_ORIGIN === 'string' ? probe.__HRP_EMBED_PARENT_ORIGIN : null;
+  if (hint && HOST_ALLOWED_ORIGINS.has(hint)) return hint;
+  const params = new URLSearchParams(search);
+  const raw = params.get('parentOrigin');
+  if (typeof raw !== 'string') return null;
+  if (!HOST_ALLOWED_ORIGINS.has(raw)) return null;
+  return raw;
+}
+
+function viForChannel(code: string): string {
+  switch (code) {
+    case 'ORIGIN_NOT_ALLOWED':
+    case 'SOURCE_MISMATCH':
+    case 'NOT_WINDOW':
+    case 'UNBOUND_PARENT':
+      return MESSAGES_VI.sourceInvalid;
+    default:
+      return MESSAGES_VI.sourceInvalid;
+  }
+}
+
+function viForParse(code: string): string {
+  switch (code) {
+    case 'PAYLOAD_TOO_LARGE':
+      return MESSAGES_VI.payloadTooLarge;
+    default:
+      return MESSAGES_VI.requestInvalid;
+  }
+}
+
+function viForApi(code: string): string {
   switch (code) {
     case 'AUTHENTICATION_REQUIRED':
     case 'SESSION_EXPIRED':
     case 'SESSION_REVOKED':
-      return 'Vui lòng đăng nhập lại.';
+      return MESSAGES_VI.sessionInvalid;
     case 'CROSS_ORG':
-      return 'Bạn không có quyền truy cập tổ chức này.';
+      return MESSAGES_VI.crossOrgDenied;
     case 'OBJECT_NOT_PERMITTED':
-      return 'Bạn không có quyền xem hồ sơ này.';
+    case 'FORBIDDEN':
+      return MESSAGES_VI.objectDenied;
     case 'PROJECTION_UNSUPPORTED':
-      return 'Trường dữ liệu không được hỗ trợ.';
-    case 'VALIDATION_ERROR':
-    case 'MALFORMED_REQUEST':
-      return 'Yêu cầu không hợp lệ.';
+      return MESSAGES_VI.projectionUnsupported;
     case 'TIMEOUT':
-      return 'Yêu cầu quá thời gian. Vui lòng thử lại.';
+      return MESSAGES_VI.requestTimeout;
     case 'STALE':
-      return 'Dữ liệu đã cũ. Vui lòng tải lại.';
+      return MESSAGES_VI.stale;
     case 'DEPENDENCY_UNAVAILABLE':
     case 'UNAVAILABLE':
-      return 'Dịch vụ tạm thời không khả dụng.';
-    case 'FORBIDDEN':
-      return 'Yêu cầu không hợp lệ.';
+      return MESSAGES_VI.unavailable;
+    case 'VALIDATION_ERROR':
+    case 'MALFORMED_REQUEST':
     default:
-      return 'Lỗi không xác định.';
+      return MESSAGES_VI.requestInvalid;
   }
 }
 
-function sendState(parent: Window | null, state: PanelState): void {
-  if (!parent) return;
-  try {
-    parent.postMessage({ kind: 'hrp/panel-state', state: state.kind }, window.location.origin);
-  } catch {
-    /* parent may be gone */
+function readErrorCode(data: unknown): string {
+  if (data !== null && typeof data === 'object' && 'error' in data) {
+    const v = (data as { error?: unknown }).error;
+    if (typeof v === 'string') return v;
   }
+  return 'UNKNOWN';
 }
 
-function EmbedPanel() {
+function sendState(binding: ChannelBinding | null, kind: PanelState['kind']): void {
+  if (!binding) return;
+  postToParent(binding, { kind: 'hrp/panel-state', state: kind });
+}
+
+function EmbedPanel(props: { binding: ChannelBinding }) {
+  const binding = props.binding;
   const [state, setState] = React.useState<PanelState>({ kind: 'idle' });
   const [activeTarget, setActiveTarget] = React.useState<string | null>(null);
   const [lastCorrelation, setLastCorrelation] = React.useState<string | null>(null);
-  const [parentOrigin, setParentOrigin] = React.useState<string>('(unknown)');
 
-  const handleEnvelope = React.useCallback(async (env: Envelope) => {
-    setState({ kind: 'loading', envelope: env });
-    sendState(window.parent, { kind: 'loading', envelope: env });
-    try {
-      const resp = await fetch('/api/embed/talent-context-read', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-HRP-Embed-Session': env.sessionRef,
-          'X-HRP-Embed-Correlation': env.correlationId,
-        },
-        body: JSON.stringify(env.body),
-      });
-      const data = await resp.json();
-      if (!resp.ok) {
-        const code = (data && typeof data === 'object' && 'error' in data) ? String((data as { error?: unknown }).error) : 'UNKNOWN';
-        const den = {
-          kind: 'denied' as const,
+  const onEnvelope = React.useCallback(
+    async (env: Envelope) => {
+      setState({ kind: 'loading', envelope: env });
+      sendState(binding, 'loading');
+      try {
+        const resp = await fetch('/api/embed/talent-context-read', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-HRP-Embed-Session': env.sessionRef,
+            'X-HRP-Embed-Correlation': env.correlationId,
+          },
+          body: JSON.stringify(env.body),
+        });
+        const data: unknown = await resp.json();
+        if (!resp.ok) {
+          const code = readErrorCode(data);
+          const den: PanelState = {
+            kind: 'denied',
+            envelope: env,
+            viMessage: viForApi(code),
+            dataDenyCode: code,
+          };
+          setState(den);
+          sendState(binding, 'denied');
+          return;
+        }
+        const redaction = assertAllowed(data);
+        if (!redaction.ok) {
+          const den: PanelState = {
+            kind: 'denied',
+            envelope: env,
+            viMessage: MESSAGES_VI.dataInvalid,
+            dataDenyCode: redaction.code,
+          };
+          setState(den);
+          sendState(binding, 'denied');
+          return;
+        }
+        const ready: PanelState = {
+          kind: 'ready',
           envelope: env,
-          code,
-          detail: code,
-          viMessage: viMessageFor(code),
+          result: redaction.redacted,
+          redaction,
+        };
+        setState(ready);
+        sendState(binding, 'ready');
+      } catch (e) {
+        const den: PanelState = {
+          kind: 'error',
+          viMessage: MESSAGES_VI.requestInvalid,
+          dataErrorDetail: e instanceof Error ? e.name : 'unknown',
         };
         setState(den);
-        sendState(window.parent, den);
-        return;
+        sendState(binding, 'error');
       }
-      // Defense-in-depth UI-side guard.
-      const redaction = assertAllowed(data);
-      if (!redaction.ok) {
-        const den = {
-          kind: 'denied' as const,
-          envelope: env,
-          code: redaction.code,
-          detail: redaction.detail,
-          viMessage: 'Dữ liệu không hợp lệ.',
-        };
-        setState(den);
-        sendState(window.parent, den);
-        return;
-      }
-      const ready = {
-        kind: 'ready' as const,
-        envelope: env,
-        result: redaction.redacted,
-        redaction,
-      };
-      setState(ready);
-      sendState(window.parent, ready);
-    } catch (e) {
-      const err = {
-        kind: 'error' as const,
-        message: e instanceof Error ? e.message : 'unknown',
-      };
-      setState(err);
-      sendState(window.parent, err);
-    }
-  }, []);
+    },
+    [binding],
+  );
 
   React.useEffect(() => {
     function onMessage(ev: MessageEvent) {
-      const originOk = assertOrigin(ev.origin);
-      if (!originOk) {
-        const den = {
-          kind: 'denied' as const,
+      const verdict = binding.accept(ev);
+      if (!verdict.ok) {
+        const den: PanelState = {
+          kind: 'denied',
           envelope: null,
-          code: 'BAD_ORIGIN',
-          detail: `origin "${ev.origin}" not in allowlist`,
-          viMessage: 'Nguồn không hợp lệ.',
+          viMessage: viForChannel(verdict.code),
+          dataDenyCode: verdict.code,
         };
         setState(den);
-        sendState(ev.source as Window, den);
+        sendState(binding, 'denied');
         return;
       }
-      if (!isWindowLike(ev.source)) {
-        const den = {
-          kind: 'denied' as const,
-          envelope: null,
-          code: 'BAD_SOURCE',
-          detail: 'event.source is not a window',
-          viMessage: 'Nguồn không hợp lệ.',
-        };
-        setState(den);
-        return;
-      }
-      setParentOrigin(ev.origin);
-      const rawSize = typeof ev.data === 'string' ? new TextEncoder().encode(ev.data).length : (() => {
-        try { return JSON.stringify(ev.data).length; } catch { return 0; }
-      })();
+      const rawSize = typeof ev.data === 'string'
+        ? new TextEncoder().encode(ev.data).length
+        : (() => {
+            try {
+              return JSON.stringify(ev.data).length;
+            } catch {
+              return 0;
+            }
+          })();
       const parsed: ParseResult = parseEnvelope(ev.data, rawSize);
       if (!parsed.ok) {
-        const den = {
-          kind: 'denied' as const,
+        const den: PanelState = {
+          kind: 'denied',
           envelope: null,
-          code: parsed.code,
-          detail: parsed.detail,
-          viMessage: viMessageFor(parsed.code),
+          viMessage: viForParse(parsed.code),
+          dataDenyCode: parsed.code,
         };
         setState(den);
-        sendState(ev.source as Window, den);
+        sendState(binding, 'denied');
         return;
       }
-      // Invalidate stale view on target change.
-      const hint = extractAcceptedHint(parsed.envelope);
-      const newTarget = parsed.envelope.body.target.laborProfileId;
+      const hint = parsed.envelope;
+      const newTarget = hint.body.target.laborProfileId;
       if (activeTarget && newTarget !== activeTarget) {
         setState({ kind: 'idle' });
       }
       setActiveTarget(newTarget);
       setLastCorrelation(hint.correlationId);
-      void handleEnvelope(parsed.envelope);
+      void onEnvelope(hint);
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [handleEnvelope, activeTarget]);
+  }, [binding, onEnvelope, activeTarget]);
 
-  // Render.
   return (
     <div
       data-testid="embed-panel"
-      data-parent-origin={parentOrigin}
+      data-parent-origin={binding.verifyParentOrigin() ?? ''}
       data-active-target={activeTarget ?? ''}
       data-last-correlation={lastCorrelation ?? ''}
       style={{
@@ -229,21 +261,21 @@ function EmbedPanel() {
           </span>
         </h2>
         <div style={{ fontSize: '0.8rem', color: '#555', marginTop: '0.25rem' }}>
-          parent: <code data-testid="embed-parent-origin">{parentOrigin}</code> · target:{' '}
-          <code data-testid="embed-active-target">{activeTarget ?? '(none)'}</code> · correlation:{' '}
-          <code data-testid="embed-correlation">{lastCorrelation ?? '(none)'}</code>
+          parent: <code data-testid="embed-parent-origin">{binding.verifyParentOrigin() ?? '(unknown)'}</code>
+          {' · '}target: <code data-testid="embed-active-target">{activeTarget ?? '(none)'}</code>
+          {' · '}correlation: <code data-testid="embed-correlation">{lastCorrelation ?? '(none)'}</code>
         </div>
       </header>
 
       {state.kind === 'idle' && (
         <div data-testid="embed-state-idle" style={{ color: '#666' }}>
-          Đang chờ yêu cầu từ embed host...
+          {MESSAGES_VI.idle}
         </div>
       )}
 
       {state.kind === 'loading' && (
         <div data-testid="embed-state-loading" style={{ color: '#1e40af' }}>
-          Đang tải ngữ cảnh...
+          {MESSAGES_VI.loading}
         </div>
       )}
 
@@ -251,6 +283,7 @@ function EmbedPanel() {
         <div
           data-testid="embed-state-denied"
           role="alert"
+          data-deny-code={state.dataDenyCode}
           style={{
             background: '#fef2f2',
             border: '1px solid #fecaca',
@@ -259,12 +292,9 @@ function EmbedPanel() {
             borderRadius: '4px',
           }}
         >
-          <strong>Không thể hiển thị ngữ cảnh.</strong>
+          <strong>{MESSAGES_VI.deniedHeader}</strong>
           <div data-testid="embed-vi-message" style={{ marginTop: '0.25rem' }}>
             {state.viMessage}
-          </div>
-          <div data-testid="embed-deny-code" style={{ fontSize: '0.75rem', color: '#666', marginTop: '0.25rem' }}>
-            code: {state.code}
           </div>
         </div>
       )}
@@ -273,6 +303,7 @@ function EmbedPanel() {
         <div
           data-testid="embed-state-error"
           role="alert"
+          data-error-detail={state.dataErrorDetail}
           style={{
             background: '#fef2f2',
             border: '1px solid #fecaca',
@@ -281,7 +312,10 @@ function EmbedPanel() {
             borderRadius: '4px',
           }}
         >
-          Lỗi: {state.message}
+          <strong>{MESSAGES_VI.deniedHeader}</strong>
+          <div data-testid="embed-vi-message" style={{ marginTop: '0.25rem' }}>
+            {state.viMessage}
+          </div>
         </div>
       )}
 
@@ -291,7 +325,7 @@ function EmbedPanel() {
             data-testid="embed-redacted-name"
             style={{ fontSize: '1.25rem', fontWeight: 600 }}
           >
-            {state.redaction.redacted.identitySummary?.fullNameRedacted ?? '(ẩn)'}
+            {state.redaction.redacted.identitySummary?.fullNameRedacted ?? MESSAGES_VI.hidden}
           </div>
           <div data-testid="embed-display-only" style={{ fontSize: '0.75rem', color: '#666' }}>
             displayOnly: {String(state.redaction.redacted.identitySummary?.displayOnly)}
@@ -308,8 +342,28 @@ function EmbedPanel() {
   );
 }
 
-const root = document.getElementById('root');
-if (root) {
-  createRoot(root).render(<EmbedPanel />);
+function mount(): void {
+  const root = document.getElementById('root');
+  if (!root) return;
+  const probe = window as unknown as MountProbeWindow;
+  if (typeof probe.parent === 'undefined' || probe.parent === window) {
+    document.body.dataset.embedPanelMounted = 'no-parent';
+    return;
+  }
+  const origin = readBoundOrigin(probe.location?.search ?? '');
+  if (!origin) {
+    document.body.dataset.embedPanelMounted = 'no-allowlisted-origin';
+    return;
+  }
+  let binding: ChannelBinding;
+  try {
+    binding = bindChannel(probe.parent as { postMessage: (msg: unknown, target: string) => void }, origin);
+  } catch {
+    document.body.dataset.embedPanelMounted = 'bind-failed';
+    return;
+  }
+  createRoot(root).render(<EmbedPanel binding={binding} />);
   document.body.dataset.embedPanelMounted = 'true';
 }
+
+mount();

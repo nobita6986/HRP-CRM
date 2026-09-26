@@ -3,9 +3,94 @@
 **Gate:** `T1-B V7.9b B.03-PREP — CONTEXT PANEL EMBEDDING & AUTHORIZATION`
 **Branch:** `codex/v79b-b03-context-panel-prep-r1`
 **Worktree:** `D:\CodeApp\Hrp-Crm-v79b-b03-prep-r1` (based on `bd837c028cfe325a56ac352e1ea2a1a44fc010b2`)
+**T0 verdict:** `CHANGES_REQUIRED` (C-B03-01..05)
+**Reviewed candidate:** `0fce6a526aa732b6e3c79e5259384a6564d63e4c`
 **B.02 evidence:** `5d6bc87076bb10523b61c319daa1873f4ab7901d`
 **Shared module:** `@hrp-engagement/contracts/talent-context-read/v1`
-**Status:** **READY_FOR_T0_B03_PREP_REVIEW** (synthetic/local only).
+**Status:** **READY_FOR_T0_B03_PREP_RECHECK_R1** (synthetic/local only).
+
+## 0b. R1 correction delta (T0 verdict: CHANGES_REQUIRED)
+
+Per T0 review, a narrow correction batch was applied: C-B03-01..05. No
+design reopen. Mapping of T0 findings → R1 source/test fixes:
+
+| T0 finding | Fix | Source | Regression tests |
+|---|---|---|---|
+| `isWindowLike()` conflated with authorization; outbound `targetOrigin` not strictly bound to verified parent origin | Two-factor `bindChannel`: origin ∈ `HOST_ALLOWED_ORIGINS` AND `event.source === boundParentWindow`. `postToParent` uses `verifiedParentOrigin` as `targetOrigin` — never `'*'` or `window.location.origin`. | `apps/context-panel/src/embed/channel-binding.ts`, `apps/context-panel/src/embed/embed-panel.tsx` | `tests/embed-host-channel-binding.test.mjs` (7 cases), `tests/embed-host-browser-evidence.mjs` (Test 4: foreign-origin → `ORIGIN_NOT_ALLOWED`). |
+| Synthetic surfaces `/embed-panel/*`, `/embed-host-simulator`, `/api/embed/*` reachable when `HRP_MOCK_MODE=off` | Single shared guard `guardEmbedSurface(config)` invoked upstream of every embed route. Returns 404 with `Embed surface disabled in production` message. | `apps/context-panel/src/embed/route-guard.ts`, `apps/context-panel/src/server.ts` | `tests/embed-host-route-guard.test.mjs` (20 cases incl. fail-closed matrix), `tests/embed-host-mockoff-matrix.mjs` (10 HTTP probes). |
+| Static file resolver does not anchor under `dist/embed-ui`; no traversal protection | `resolveSafeStaticPath(rootDir, sub)` decodes `%2e/%2f/%5c/%00`, rejects `..` segments, NUL bytes, drive-letter absolute paths, UNC-style `//server/share`, and out-of-root resolutions. | `apps/context-panel/src/embed/static-resolver.ts`, `apps/context-panel/src/server.ts` | `tests/embed-host-static-resolver.test.mjs` (16 probes incl. canonical regression `/embed-panel/../../package.json`). |
+| `npm run build` did not invoke `scripts/build-embed-ui.mjs` | Wired `tsc && npm run build:embed-ui && npm run build:ui` as the canonical build. Verified clean rebuild from snapshot without `dist/`. | `apps/context-panel/package.json` | `scripts/clean-embed-ui.mjs` (rm -rf dist/embed-ui before each build), `tests/embed-host-mockoff-matrix.mjs` (HTTP probes against freshly-built artifacts). |
+| UI rendered raw internal error codes (`MALFORMED_REQUEST`, `FORBIDDEN_FIELD`, etc.) and exception messages | All rejection text routed through `MESSAGES_VI` allowlist (Vietnamese only). Diagnostic codes live in `data-deny-code` attribute only; raw codes never appear in DOM. | `apps/context-panel/src/embed/messages-vi.ts`, `apps/context-panel/src/embed/embed-panel.tsx` | `tests/embed-host-ui-hygiene.test.mjs` (12 assertions across 5 rejection paths), `tests/embed-host-browser-evidence.mjs` (asserts no `Ng••` / `V••` leak in vi message after rejection). |
+
+### R1 test counts and exit codes
+
+| Suite | Cases | Pass | Fail | Exit code |
+|---|---|---|---|---|
+| `tests/embed-host-channel-binding.test.mjs` (C-B03-01) | 7 | 7 | 0 | 0 |
+| `tests/embed-host-route-guard.test.mjs` (C-B03-02 fail-closed) | 20 | 20 | 0 | 0 |
+| `tests/embed-host-static-resolver.test.mjs` (C-B03-02 containment) | 16 | 16 | 0 | 0 |
+| `tests/embed-host-ui-hygiene.test.mjs` (C-B03-04) | 12 | 12 | 0 | 0 |
+| `tests/embed-host-mockoff-matrix.mjs` (C-B03-02 HTTP probes) | 10 | 10 | 0 | 0 |
+| Focused suite (5 files) | 151 | 151 | 0 | 0 |
+| `tests/embed-host-browser-evidence.mjs` (Playwright Chromium, 13 cases) | 13 | 13 | 0 | 0 |
+| `npm test` (full suite) | 470 | 468 | 2 | 1 |
+
+### R1 mock-off route matrix (HRP_MOCK_MODE=off + NODE_ENV=production)
+
+| Path | Expected | Actual | Verdict |
+|---|---|---|---|
+| `GET /embed-panel/index.html` | 404 | 404 `Embed surface disabled in production` | OK |
+| `GET /embed-host-simulator` | 404 | 404 `Embed surface disabled in production` | OK |
+| `POST /api/embed/talent-context-read` | 404 | 404 `Embed surface disabled in production` | OK |
+| `POST /api/embed/seed` | 404 | 404 `Embed surface disabled in production` | OK |
+| `POST /api/embed/revoke` | 404 | 404 `Embed surface disabled in production` | OK |
+
+### R1 traversal negative-probe results (mock-off)
+
+| Probe path | Expected | Actual | Verdict |
+|---|---|---|---|
+| `/embed-panel/../../package.json` | 404, no `package.json` content | 404 | OK |
+| `/embed-panel/%2e%2e%2fpackage.json` | 404 | 404 | OK |
+| `/embed-panel/%2e%2e/%2e%2e/package.json` | 404 | 404 | OK |
+| `/embed-panel/%5c..%5cpackage.json` | 404 | 404 | OK |
+| `/embed-panel//server/share/package.json` | 404 | 404 | OK |
+
+### R1 clean-build proof
+
+From snapshot without `dist/`:
+
+```bash
+cd apps/context-panel
+rm -rf dist
+npm ci --include=dev
+npm run build
+# Result: dist/embed-ui/index.html + dist/embed-ui/bundle.js both created.
+```
+
+Browser evidence ran against these freshly-built artifacts.
+
+### R1 pre-existing manifest test failures (C-B03-05 classification)
+
+Two test failures persist in `npm test` that are PRE-EXISTING on the baseline
+commit `bd837c028cfe325a56ac352e1ea2a1a44fc010b2` (i.e. on the T0 review
+candidate `0fce6a52` before any R1 changes):
+
+- `tests/manifest-readonly-1.13.test.mjs`: `--verify` reports 14 hash
+  mismatches but `manifest=...` and `actual=...` are byte-identical, indicating
+  a CRLF/LF normalization bug in the verify path on Windows. Confirmed
+  reproducible against baseline commit (4 pass / 1 fail).
+- `tests/manifest-readonly-1.14.test.mjs`: same root cause (hash-mismatch on
+  bundled manifest that prints identical hex but fails). Confirmed
+  reproducible against baseline.
+
+Per C-B03-05 ("giải quyết hoặc phân loại chính xác"): these are
+classified as **PRE-EXISTING** and **NOT IN SCOPE** for B.03-PREP (which is
+synthetic/local-only and does not modify the bundled manifests of CORE/1.13
+or CORE/1.14). Fixing the CRLF normalization is deferred to a CORE manifest
+hygiene task and explicitly marked as `BLOCKED_BY_CORE_MANIFEST_HYGIENE`.
+
+Full suite exit code is therefore 1 with two pre-existing failures that
+must NOT block `READY_FOR_T0_B03_PREP_RECHECK_R1`.
 
 ## Scope boundaries (explicit)
 

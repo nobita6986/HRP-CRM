@@ -1,6 +1,6 @@
 {
   "baseUrl": "http://127.0.0.1:15503",
-  "startedAt": "2026-09-26T08:25:59.554Z",
+  "startedAt": "2026-09-26T11:20:09.359Z",
   "tests": [
     {
       "name": "panel-render-canonical",
@@ -15,27 +15,27 @@
     {
       "name": "revoke-clears-context",
       "ok": true,
-      "note": "denyCode=\"code: SESSION_REVOKED\" viMessage=\"Vui lòng đăng nhập lại.\""
+      "note": "denyCode=\"SESSION_REVOKED\" viMessage=\"Vui lòng đăng nhập lại.\""
     },
     {
       "name": "foreign-origin-rejected",
       "ok": true,
-      "note": "denyCode=\"code: BAD_ORIGIN\""
+      "note": "denyCode=\"ORIGIN_NOT_ALLOWED\""
     },
     {
       "name": "missing-session-denied",
       "ok": true,
-      "note": "denyCode=\"code: SCHEMA_FAILED\""
+      "note": "denyCode=\"SCHEMA_FAILED\""
     },
     {
       "name": "forbidden-field-rejected",
       "ok": true,
-      "note": "denyCode=\"code: FORBIDDEN_FIELD\""
+      "note": "denyCode=\"FORBIDDEN_FIELD\""
     },
     {
       "name": "oversized-payload-rejected",
       "ok": true,
-      "note": "denyCode=\"code: FORBIDDEN_FIELD\""
+      "note": "denyCode=\"PAYLOAD_TOO_LARGE\""
     },
     {
       "name": "panel-narrow-380",
@@ -69,7 +69,7 @@
     }
   ],
   "notes": "B.03-PREP synthetic/local only; real Chatwoot NOT verified; HRP runtime NOT verified.",
-  "finishedAt": "2026-09-26T08:26:03.535Z",
+  "finishedAt": "2026-09-26T11:20:14.449Z",
   "pass": 13,
   "fail": 0
 }

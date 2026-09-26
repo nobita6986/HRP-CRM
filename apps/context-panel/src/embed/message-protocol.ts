@@ -221,6 +221,11 @@ export function parseEnvelope(rawData: unknown, rawSizeBytes?: number): ParseRes
 
 /**
  * Validate event.origin against the synthetic host allowlist. Browser-only.
+ *
+ * NOTE: assertOrigin alone is NOT authorization. The trust gate is the
+ * CHANNEL BINDING (see channel-binding.ts): origin AND source===boundParent.
+ * isWindowLike is a sanity check used inside bindChannel; it is NOT
+ * authorization on its own.
  */
 export function assertOrigin(origin: string | null | undefined): boolean {
   if (typeof origin !== 'string') return false;
