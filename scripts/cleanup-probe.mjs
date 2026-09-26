@@ -42,6 +42,12 @@ import {
   killTreeScoped,
   awaitChildClose,
   auditLeftovers,
+  summarizeCleanup,
+  tcpProbeConnect,
+  validateWorkerDataDir,
+  findEmbeddedPgCtl,
+  runPgCtlStop,
+  runTaskkill,
 } from './b02-cleanup.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -54,6 +60,7 @@ const EVIDENCE_DIR = path.resolve(
   '.b02-probe',
 );
 const HAPPY_MODE = process.env['B02_PROBE_HAPPY'] === '1';
+const ORPHAN_MODE = process.env['B02_PROBE_ORPHAN'] === '1';
 const PROBE_TIMEOUT_MS = Number(process.env['B02_PROBE_TIMEOUT_MS'] ?? '1500');
 
 function findFreePort() {
@@ -91,12 +98,66 @@ s.listen(port, '127.0.0.1', () => {
   if (markFile) {
     try { fs.writeFileSync(markFile, String(process.pid), 'utf8'); } catch {}
   }
-  process.stdout.write(JSON.stringify({ kind: 'child_listening', port }) + '\\n');
+  process.stdout.write(JSON.stringify({ kind: 'child_listening', port, pid: process.pid }) + '\\n');
   setTimeout(() => {
     process.stdout.write(JSON.stringify({ kind: 'child_exiting' }) + '\\n');
     s.close(() => process.exit(0));
   }, keepaliveMs).unref();
 });
+`;
+
+/**
+ * R5-06: orphan / reparented-listener probe child.
+ *
+ * This child spawns a DETACHED grandchild that opens a TCP listener
+ * on the port we hand it. The grandchild is spawned with detached:true
+ * and stdio:ignore so it survives the parent exiting. After spawning
+ * the grandchild, the root writes its PID to the mark file and exits
+ * normally.
+ *
+ * Usage:
+ *   node cleanup-probe-orphan-child.cjs <port> <markFile>
+ *
+ * Result: when this child exits, the grandchild (listener) keeps
+ * listening on the port — exactly the orphan/descendant scenario the
+ * cleanup helper must handle via PID refresh + retry.
+ */
+const ORPHAN_CHILD_SOURCE = `
+const net = require('node:net');
+const fs = require('node:fs');
+const { spawn } = require('child_process');
+const port = Number(process.argv[2]);
+const markFile = process.argv[3];
+
+const grandchildSource = [
+  "const net = require('node:net');",
+  "const fs = require('node:fs');",
+  "const port = Number(process.argv[2]);",
+  "const markFile = process.argv[3];",
+  "const s = net.createServer();",
+  "s.on('error', (e) => {",
+  "  try { fs.writeFileSync(markFile + '.gc.error', String(e.message)); } catch {}",
+  "  process.exit(2);",
+  "});",
+  "s.listen(port, '127.0.0.1', () => {",
+  "  try { fs.writeFileSync(markFile, String(process.pid)); } catch {}",
+  "  console.log(JSON.stringify({ kind: 'grandchild_listening', port, pid: process.pid }));",
+  "});",
+  "process.on('SIGTERM', () => { s.close(() => process.exit(0)); });",
+].join('\\n');
+
+const tmpPath = markFile + '.gc.cjs';
+fs.writeFileSync(tmpPath, grandchildSource);
+
+const child = spawn(process.execPath, [tmpPath, String(port), markFile], {
+  detached: true,
+  stdio: 'ignore',
+  windowsHide: true,
+});
+child.unref();
+process.stdout.write(JSON.stringify({ kind: 'orphan_root_started', grandchildPid: child.pid, port }) + '\\n');
+// Exit naturally so the parent (the probe) sees a clean close.
+process.exit(0);
 `;
 
 async function main() {
@@ -118,7 +179,11 @@ async function main() {
   const { spawn } = await import('node:child_process');
   const { writeFile: wfSync } = await import('node:fs/promises');
   const tmpChildPath = path.join(evidenceRunDir, 'cleanup-probe-child.cjs');
-  await wfSync(tmpChildPath, CHILD_SOURCE, 'utf8');
+  await wfSync(
+    tmpChildPath,
+    ORPHAN_MODE ? ORPHAN_CHILD_SOURCE : CHILD_SOURCE,
+    'utf8',
+  );
 
   const keepaliveMs = HAPPY_MODE ? 200 : 60_000; // happy: short so natural exit; probe: long so runner times out
   const markFile = path.join(evidenceRunDir, 'child.pid');
@@ -127,7 +192,9 @@ async function main() {
 
   const child = spawn(
     process.execPath,
-    [tmpChildPath, String(port), String(keepaliveMs), markFile],
+    ORPHAN_MODE
+      ? [tmpChildPath, String(port), markFile]
+      : [tmpChildPath, String(port), String(keepaliveMs), markFile],
     {
       cwd: __dirname,
       env: { ...process.env, NODE_ENV: 'development' },
@@ -139,21 +206,35 @@ async function main() {
   let stderrRaw = '';
   child.stdout.on('data', (d) => (stdoutRaw += d.toString()));
   child.stderr.on('data', (d) => (stderrRaw += d.toString()));
-  recordStage('spawned', { pid: child.pid });
+  recordStage('spawned', { pid: child.pid, mode: ORPHAN_MODE ? 'orphan' : (HAPPY_MODE ? 'happy' : 'probe') });
 
-  // Wait for the child to log `child_listening` (best-effort, short).
+  // Wait for the child to log its startup marker.
+  const startMarker = ORPHAN_MODE ? '"orphan_root_started"' : '"child_listening"';
   const listenDeadline = Date.now() + 5000;
   while (Date.now() < listenDeadline) {
-    if (stdoutRaw.includes('"child_listening"')) break;
+    if (stdoutRaw.includes(startMarker)) break;
     await new Promise((r) => setTimeout(r, 50));
   }
-  recordStage('child_listening', {
-    saw: stdoutRaw.includes('"child_listening"'),
+  // ORPHAN_MODE: the root child exits cleanly after spawning the
+  // detached grandchild. Give the grandchild a moment to bind the port.
+  if (ORPHAN_MODE) {
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  recordStage('child_started', {
+    saw: stdoutRaw.includes(startMarker),
     pidFileExists: existsSync(markFile),
   });
 
+  // For ORPHAN_MODE the root exits; await its close so we know the
+  // grandchild is alone with the port.
   let race;
-  if (HAPPY_MODE) {
+  if (ORPHAN_MODE) {
+    race = await awaitChildClose(child, 5000);
+    recordStage('orphan_root_close', race);
+    // After the root exits, the grandchild should still be listening.
+    const tcpAfterRootExit = await tcpProbeConnect(port);
+    recordStage('orphan_tcp_after_root_exit', tcpAfterRootExit);
+  } else if (HAPPY_MODE) {
     // Happy mode: do not enforce a runner timeout; just await close.
     race = await awaitChildClose(child, Math.max(keepaliveMs + 2000, 5000));
     recordStage('happy_close', race);
@@ -174,6 +255,7 @@ async function main() {
       rootPid: child.pid,
       suffixPort: port,
       dataDir,
+      worktreeCwd: __dirname,
     });
     recordStage('cleanup_result', { ok: cleanup.ok, failureStage: cleanup.failureStage });
     const finalClose = await awaitChildClose(child, 5000);
@@ -189,33 +271,70 @@ async function main() {
   } else if (race.kind === 'close') {
     exitCode = race.code;
     signal = race.signal;
+    const tcpAfterClose = await tcpProbeConnect(port);
     const audit1 = auditLeftovers(port);
     await new Promise((r) => setTimeout(r, 500));
     const audit2 = auditLeftovers(port);
+    const tcpFinal = await tcpProbeConnect(port);
     cleanup = {
-      ok: audit1.closed === true && audit2.closed === true,
+      ok:
+        audit1.closed === true &&
+        audit2.closed === true &&
+        tcpAfterClose.connectable === false &&
+        tcpFinal.connectable === false,
       rootGone: true,
       portOwner: null,
       audit1,
       audit2,
+      tcpAfterClose,
+      tcpClosed: tcpFinal.connectable === false,
+      tcpProbe: tcpFinal,
       dataDirRemoved: 'pending_outer_cleanup',
       steps: [
         { step: 'taskkill_root', skipped: 'natural_exit' },
         { step: 'netstat_port', available: audit1.available, portHits: audit1.portHits || [] },
+        { step: 'taskkill_port_owner', skipped: audit1.closed ? 'port_closed' : 'port_owner_unknown' },
+        { step: 'tcp_probe_after_close', ...tcpAfterClose },
         { step: 'audit1', ...audit1 },
         { step: 'audit2', ...audit2 },
+        { step: 'tcp_probe_final', ...tcpFinal },
       ],
       failureStage:
-        audit1.closed !== true || audit2.closed !== true
+        audit1.closed !== true || audit2.closed !== true || tcpFinal.connectable === true
           ? audit1.closed !== true
             ? 'audit1'
-            : 'audit2'
+            : audit2.closed !== true
+              ? 'audit2'
+              : 'tcp_probe_final'
           : null,
     };
   } else if (race.kind === 'error') {
     exitCode = null;
     signal = 'SPAWN_ERROR_EVENT';
     noExit = true;
+  }
+
+  // ORPHAN_MODE: even after the root child exits cleanly, the
+  // grandchild still holds the port. We MUST invoke killTreeScoped
+  // so the helper exercises its PID-refresh + pg_ctl fallback path,
+  // regardless of whether the root exited cleanly or timed out.
+  // We OVERWRITE any synthetic cleanup built above because the
+  // synthetic one assumes the port is closed, but the grandchild
+  // is still listening on it.
+  if (ORPHAN_MODE) {
+    recordStage('orphan_kill_phase_start');
+    cleanup = await killTreeScoped({
+      rootPid: child.pid,
+      suffixPort: port,
+      dataDir,
+      worktreeCwd: __dirname,
+    });
+    recordStage('orphan_cleanup_result', {
+      ok: cleanup.ok,
+      failureStage: cleanup.failureStage,
+      portOwnerRefreshed: cleanup.portOwnerRefreshed,
+      pgCtlAttempts: cleanup.pgCtlAttempts,
+    });
   }
 
   // Outer data-dir cleanup if needed.
@@ -232,20 +351,13 @@ async function main() {
   }
 
   // R4-03 final cleanup verification: root no longer exists.
-  // We have two independent signals:
-  //   (a) the helper's tasklist probe (cleanup.rootGone)
-  //   (b) whether the markFile written by the child is still present
-  //       (it is only written by the child and is a static file, so
-  //       its existence is not a signal of the child still being
-  //       alive — it is just a record of the PID it started with).
-  // Therefore we trust (a). The markFile existence is recorded as
-  // a separate diagnostic.
   const rootGone = cleanup ? cleanup.rootGone : null;
   const childPidFileExistedAtEnd = existsSync(markFile);
 
   const meta = {
     port,
     happyMode: HAPPY_MODE,
+    orphanMode: ORPHAN_MODE,
     timeoutMs: PROBE_TIMEOUT_MS,
     startedAt,
     finishedAt: Date.now(),
@@ -255,7 +367,8 @@ async function main() {
     signal,
     noExit,
     rootGone,
-    cleanup,
+    cleanup: cleanup ? summarizeCleanup(cleanup) : null,
+    cleanupRaw: cleanup,
     dataDirCleanup,
     stages,
     childPidFile: markFile,
@@ -267,36 +380,46 @@ async function main() {
   await writeFile(stderrPath, meta.stderr);
   await writeFile(metaPath, JSON.stringify(meta, null, 2));
 
-  // Verdict:
+  // R5 verdict:
   //   - PROBE: timeout, cleanup.ok === true, audit1/2 closed === true,
-  //            dataDir cleaned.
-  //   - HAPPY: natural exit, audit1/2 closed === true, dataDir cleaned.
-  const probePass =
-    timedOut &&
+  //            TCP not connectable, dataDir cleaned.
+  //   - HAPPY: natural exit, audit1/2 closed === true, TCP not
+  //            connectable, dataDir cleaned.
+  //   - ORPHAN: root exited cleanly; cleanup must have detected the
+  //             orphan listener, refreshed PID, killed it, and
+  //             cleaned up the data dir + port.
+  const auditClean = (r) =>
     cleanup &&
-    cleanup.ok === true &&
     cleanup.audit1 &&
     cleanup.audit1.closed === true &&
     cleanup.audit2 &&
     cleanup.audit2.closed === true &&
-    (dataDirCleanup === 'removed' || dataDirCleanup === 'absent');
+    cleanup.tcpClosed === true;
+  const dataDirClean = dataDirCleanup === 'removed' || dataDirCleanup === 'absent';
+  const probePass =
+    timedOut && cleanup && cleanup.ok === true && auditClean(cleanup) && dataDirClean;
   const happyPass =
+    !timedOut && exitCode === 0 && cleanup && cleanup.ok === true && auditClean(cleanup) && dataDirClean;
+  const orphanPass =
     !timedOut &&
     exitCode === 0 &&
     cleanup &&
     cleanup.ok === true &&
-    cleanup.audit1 &&
-    cleanup.audit1.closed === true &&
-    cleanup.audit2 &&
-    cleanup.audit2.closed === true &&
-    (dataDirCleanup === 'removed' || dataDirCleanup === 'absent');
+    auditClean(cleanup) &&
+    cleanup.portOwnerRefreshed === true &&
+    dataDirClean;
 
-  const verdict = HAPPY_MODE ? (happyPass ? 'GATE_PASS' : 'GATE_FAIL') : probePass ? 'PROBE_PASS' : 'PROBE_FAIL';
+  const verdict = ORPHAN_MODE
+    ? orphanPass ? 'PROBE_PASS' : 'PROBE_FAIL'
+    : HAPPY_MODE
+      ? happyPass ? 'GATE_PASS' : 'GATE_FAIL'
+      : probePass ? 'PROBE_PASS' : 'PROBE_FAIL';
 
   const summary = {
     startedAt: new Date(startedAt).toISOString(),
     finishedAt: new Date().toISOString(),
     happyMode: HAPPY_MODE,
+    orphanMode: ORPHAN_MODE,
     timeoutMs: PROBE_TIMEOUT_MS,
     port,
     rootGone,
@@ -308,6 +431,9 @@ async function main() {
     cleanupOk: cleanup ? cleanup.ok : false,
     audit1Closed: cleanup && cleanup.audit1 ? cleanup.audit1.closed : null,
     audit2Closed: cleanup && cleanup.audit2 ? cleanup.audit2.closed : null,
+    tcpClosed: cleanup ? cleanup.tcpClosed : null,
+    portOwnerRefreshed: cleanup ? cleanup.portOwnerRefreshed : null,
+    pgCtlAttempts: cleanup ? cleanup.pgCtlAttempts : null,
     failureStage: cleanup ? cleanup.failureStage : null,
     verdict,
     evidenceFiles: {
@@ -326,6 +452,10 @@ async function main() {
       summary.audit1Closed +
       ' audit2Closed=' +
       summary.audit2Closed +
+      ' tcpClosed=' +
+      summary.tcpClosed +
+      ' portOwnerRefreshed=' +
+      summary.portOwnerRefreshed +
       ' dataDir=' +
       dataDirCleanup +
       ' timedOut=' +

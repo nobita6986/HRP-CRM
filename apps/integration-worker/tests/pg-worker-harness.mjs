@@ -34,7 +34,15 @@ import { createPrismaClient } from '@hrp-engagement/integration-store';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import pkg from 'pg';
-import { execSync } from 'node:child_process';
+import {
+  auditLeftovers,
+  boundedWaitPortClosed,
+  findEmbeddedPgCtl,
+  runPgCtlStop,
+  runTaskkill,
+  tcpProbeConnect,
+  validateWorkerDataDir,
+} from '../../../scripts/b02-cleanup.mjs';
 
 // Required by T1-B / C-B02-1. Every call to start() must supply a unique
 // suffix so port + data dir never collide across sequential runs.
@@ -54,81 +62,21 @@ const SCHEMA = 'integration';
 
 // T1-B round-4 / R4-01 teardown budget. After pg.stop() returns, the
 // postgres child has up to TEARDOWN_PORT_POLL_TIMEOUT_MS to release
-// PORT. We poll every TEARDOWN_PORT_POLL_INTERVAL_MS. If still listening
-// when the budget expires, stop() throws.
-const TEARDOWN_PORT_POLL_INTERVAL_MS = 250;
+// PORT. The R5 helper `boundedWaitPortClosed` controls the poll cadence.
+// R5-04: bounded pg_ctl stop budget.
 const TEARDOWN_PORT_POLL_TIMEOUT_MS = 15_000;
-// Bounded netstat for the port-close probe. If netstat hangs or is
-// unavailable, the probe returns `closed: null` and stop() throws.
-const NETSTAT_TIMEOUT_MS = 5_000;
+const PG_CTL_TIMEOUT_MS = 8_000;
+// R5-02: gap between audit1 and audit2 (kept short — both must be
+// closed=true within this gap for PASS).
+const AUDIT_GAP_MS = 500;
 
 console.log(`[pg-worker-harness] SUFFIX=${SUFFIX} PORT=${PORT} DATA_DIR=${DATA_DIR}`);
 
-/**
- * Probe whether `port` has a LISTENING socket on 127.0.0.1.
- *
- * Bounded (NETSTAT_TIMEOUT_MS). On timeout / spawn error / unparseable
- * output returns { closed: null } — the caller treats that as "unknown"
- * and throws (R4-01 fail-closed teardown).
- */
-function isPortListening(port) {
-  const startedAt = Date.now();
-  let out = '';
-  try {
-    out = execSync('netstat -ano -p tcp', {
-      stdio: ['ignore', 'pipe', 'ignore'],
-      windowsHide: true,
-      timeout: NETSTAT_TIMEOUT_MS,
-      maxBuffer: 8 * 1024 * 1024,
-    }).toString('utf8');
-  } catch (e) {
-    return {
-      closed: null,
-      durationMs: Date.now() - startedAt,
-      errorCategory: classifyExecError(e),
-      note: 'netstat probe failed: ' + ((e && e.message) || String(e)),
-    };
-  }
-  const durationMs = Date.now() - startedAt;
-  for (const line of out.split(/\r?\n/)) {
-    const m = line.match(/\s(127\.0\.0\.1|\[::\]):(\d+)\s+\S+\s+LISTENING\s+(\d+)/);
-    if (m && Number(m[2]) === port) {
-      return {
-        closed: false,
-        ownerPid: Number(m[3]),
-        address: m[1],
-        durationMs,
-      };
-    }
-  }
-  return { closed: true, durationMs };
-}
-
-function classifyExecError(e) {
-  if (!e) return 'unknown';
-  const msg = (e.message || String(e)).toLowerCase();
-  if (msg.includes('timeout') || msg.includes('timed out')) return 'timeout';
-  if (msg.includes('enoent') || msg.includes('not found')) return 'missing_tool';
-  if (msg.includes('eperm') || msg.includes('eacces') || msg.includes('access')) {
-    return 'access_denied';
-  }
-  return 'spawn_error';
-}
-
-async function waitForPortClosed(port) {
-  const deadline = Date.now() + TEARDOWN_PORT_POLL_TIMEOUT_MS;
-  let last = null;
-  while (Date.now() < deadline) {
-    last = isPortListening(port);
-    if (last.closed === true) return last;
-    if (last.closed === null) {
-      // Unknown — bail out and let stop() throw.
-      return last;
-    }
-    await new Promise((r) => setTimeout(r, TEARDOWN_PORT_POLL_INTERVAL_MS));
-  }
-  return last;
-}
+// T1-B round-5: harness.stop() relies on the R5 helpers imported from
+// scripts/b02-cleanup.mjs (boundedWaitPortClosed, auditLeftovers,
+// tcpProbeConnect, runTaskkill, validateWorkerDataDir,
+// findEmbeddedPgCtl, runPgCtlStop). The in-process polling,
+// PID-refresh, and pg_ctl fallback are all inlined below.
 
 export async function start() {
   const pg = new EmbeddedPostgres({
@@ -194,53 +142,182 @@ export async function start() {
     prisma,
     async stop() {
       const teardownStartedAt = Date.now();
+      const teardownSteps = [];
+      function recordStep(name, extra) {
+        const entry = { atMs: Date.now() - teardownStartedAt, step: name };
+        if (extra && typeof extra === 'object') Object.assign(entry, extra);
+        teardownSteps.push(entry);
+      }
       // Single ownership of prisma disconnect (C-B02-2 invariant).
       try {
         await prisma.$disconnect();
+        recordStep('prisma_disconnected', { ok: true });
       } catch (e) {
-        throw new Error(
-          '[pg-worker-harness] prisma.$disconnect failed: ' +
-            ((e && e.message) || String(e)),
-        );
+        recordStep('prisma_disconnected', { ok: false, error: (e && e.message) || String(e) });
+        // Continue: we still want to attempt pg.stop and port cleanup
+        // even if the Prisma disconnect path itself errored.
       }
       // Now stop postgres. pg.stop() internally runs `pg_ctl stop` and
       // waits, but the listening socket may still be held by a child
-      // server process. We poll after pg.stop() returns to confirm the
-      // port is gone.
-      await pg.stop();
-      const probe = await waitForPortClosed(PORT);
-      if (probe.closed === true) {
-        const elapsedMs = Date.now() - teardownStartedAt;
-        console.log(
-          JSON.stringify({
-            kind: 'harness_stop_done',
-            port: PORT,
-            elapsedMs,
-            probeDurationMs: probe.durationMs,
-          }),
-        );
-        return;
+      // server process that reparented away from the postmaster. T1-B
+      // round-5: bounded polling + PID refresh + pg_ctl fallback.
+      let pgStopError = null;
+      try {
+        await pg.stop();
+        recordStep('pg_stop_returned', { ok: true });
+      } catch (e) {
+        pgStopError = e;
+        recordStep('pg_stop_returned', { ok: false, error: (e && e.message) || String(e) });
       }
+
+      // R5-02: bounded port-close polling (≤15 s). On Windows, the
+      // embedded-postgres' postmaster can detach and reparent to PID 1
+      // (or stay alive under its own handle); the listening socket may
+      // survive `pg.stop()` for several seconds. Poll until both
+      // netstat and the TCP probe confirm the port is gone.
+      const bounded = await boundedWaitPortClosed(PORT, TEARDOWN_PORT_POLL_TIMEOUT_MS);
+      recordStep('bounded_wait_port_closed', {
+        ok: bounded.ok,
+        iterations: bounded.iterations,
+        reason: bounded.reason,
+      });
+
+      let ownerPid = bounded.finalAudit ? bounded.finalAudit.ownerPid : null;
+      let ownerAddress = bounded.finalAudit ? bounded.finalAudit.address : null;
+
+      // R5-03: PID refresh + retry. If the port STILL has a listener,
+      // refresh the owner PID from netstat and re-taskkill bounded.
+      // We never declare "already gone" on a stale PID; the TCP probe
+      // is the source of truth.
+      if (bounded.ok !== true) {
+        for (let refreshIter = 0; refreshIter < 2; refreshIter += 1) {
+          const freshAudit = auditLeftovers(PORT);
+          if (freshAudit.closed === true) {
+            const probe = await tcpProbeConnect(PORT);
+            if (probe.connectable === false) {
+              recordStep('pid_refresh_break', { iter: refreshIter, reason: 'closed_after_refresh', audit: freshAudit, tcp: probe });
+              ownerPid = null;
+              break;
+            }
+          }
+          if (freshAudit.available === false || !freshAudit.ownerPid) {
+            recordStep('pid_refresh_break', { iter: refreshIter, reason: 'no_distinct_owner', audit: freshAudit });
+            break;
+          }
+          const freshPid = freshAudit.ownerPid;
+          const tk = runTaskkill(['/PID', String(freshPid), '/T', '/F']);
+          recordStep('pid_refresh_kill', { iter: refreshIter, pid: freshPid, ...tk });
+          ownerPid = freshPid;
+          ownerAddress = freshAudit.address;
+          // Give the OS a moment to release the socket.
+          const reWait = await boundedWaitPortClosed(PORT, 3_000);
+          recordStep('pid_refresh_recheck', {
+            iter: refreshIter,
+            ok: reWait.ok,
+            iterations: reWait.iterations,
+          });
+          if (reWait.ok) break;
+        }
+      }
+
+      // Final two-consecutive-audit confirmation (R5-02 + R5-03):
+      // audit1 AND audit2 (with AUDIT_GAP_MS between) AND a final
+      // TCP probe that confirms the OS no longer accepts a SYN.
+      const audit1 = auditLeftovers(PORT);
+      recordStep('audit1', audit1);
+      const interGapAt = Date.now();
+      await new Promise((r) => setTimeout(r, AUDIT_GAP_MS));
+      const audit2 = auditLeftovers(PORT);
+      recordStep('audit2', { interAuditGapMs: Date.now() - interGapAt, ...audit2 });
+
+      const tcpFinal = await tcpProbeConnect(PORT);
+      recordStep('tcp_probe_final', tcpFinal);
+      const tcpClosed = tcpFinal.connectable === false;
+
+      const auditClean = audit1.closed === true && audit2.closed === true;
+
+      if (!auditClean || !tcpClosed) {
+        // R5-04: PostgreSQL-aware fallback via pg_ctl stop on the
+        // validated worker data dir. Never run pg_ctl stop on a path
+        // that does not match `.tmp_pgdata_worker_*` and is not
+        // rooted under the worktree.
+        const validation = validateWorkerDataDir({ dataDir: DATA_DIR, worktreeCwd: process.cwd() });
+        recordStep('pg_ctl_validation', validation);
+        if (validation.ok) {
+          const pgCtlPath = findEmbeddedPgCtl({ worktreeCwd: process.cwd() });
+          if (pgCtlPath) {
+            recordStep('pg_ctl_path', { path: pgCtlPath });
+            const stop = runPgCtlStop({
+              pgCtlPath,
+              dataDir: validation.dataDir,
+              timeoutMs: PG_CTL_TIMEOUT_MS,
+            });
+            recordStep('pg_ctl_stop', stop);
+            if (stop.ok) {
+              // Re-poll the port after the pg_ctl stop.
+              const rePoll = await boundedWaitPortClosed(PORT, 5_000);
+              recordStep('pg_ctl_stop_recheck', {
+                ok: rePoll.ok,
+                iterations: rePoll.iterations,
+              });
+            }
+          } else {
+            recordStep('pg_ctl_path', { skipped: 'not_found' });
+          }
+        }
+
+        // Re-run the audit chain after the fallback.
+        const audit1b = auditLeftovers(PORT);
+        const interGapAt2 = Date.now();
+        await new Promise((r) => setTimeout(r, AUDIT_GAP_MS));
+        const audit2b = auditLeftovers(PORT);
+        recordStep('audit1_after_fallback', audit1b);
+        recordStep('audit2_after_fallback', { interAuditGapMs: Date.now() - interGapAt2, ...audit2b });
+        const tcpFinal2 = await tcpProbeConnect(PORT);
+        recordStep('tcp_probe_final_after_fallback', tcpFinal2);
+        const finalClean =
+          audit1b.closed === true &&
+          audit2b.closed === true &&
+          tcpFinal2.connectable === false;
+        if (!finalClean) {
+          const elapsedMs = Date.now() - teardownStartedAt;
+          const detail = {
+            kind: 'harness_stop_failed',
+            port: PORT,
+            dataDir: DATA_DIR,
+            ownerPid,
+            ownerAddress,
+            elapsedMs,
+            steps: teardownSteps,
+            pgStopError: pgStopError ? (pgStopError.message || String(pgStopError)) : null,
+            reason: !audit1b.closed
+              ? 'port_still_listening_after_fallback'
+              : !audit2b.closed
+                ? 'port_flaky_reopened'
+                : 'tcp_still_connectable_after_fallback',
+          };
+          console.log(JSON.stringify(detail));
+          throw new Error(
+            '[pg-worker-harness] stop failed: ' +
+              detail.reason +
+              ' (port=' +
+              PORT +
+              ', ownerPid=' +
+              (ownerPid || audit1b.ownerPid || 'unknown') +
+              ')',
+          );
+        }
+      }
+
       const elapsedMs = Date.now() - teardownStartedAt;
-      const detail = {
-        kind: 'harness_stop_failed',
-        port: PORT,
-        elapsedMs,
-        probe,
-        reason:
-          probe.closed === null
-            ? 'port-close probe unavailable'
-            : 'port still listening after pg.stop()',
-      };
-      console.log(JSON.stringify(detail));
-      throw new Error(
-        '[pg-worker-harness] stop failed: ' +
-          detail.reason +
-          ' (port=' +
-          PORT +
-          ', ownerPid=' +
-          (probe.ownerPid || 'unknown') +
-          ')',
+      console.log(
+        JSON.stringify({
+          kind: 'harness_stop_done',
+          port: PORT,
+          dataDir: DATA_DIR,
+          elapsedMs,
+          steps: teardownSteps,
+        }),
       );
     },
   };

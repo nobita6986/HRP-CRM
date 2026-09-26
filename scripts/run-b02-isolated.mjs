@@ -41,6 +41,8 @@ import {
   killTreeScoped,
   awaitChildClose,
   auditLeftovers,
+  summarizeCleanup,
+  tcpProbeConnect,
 } from './b02-cleanup.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -174,11 +176,14 @@ async function runOnce(idx, evidenceRunDir) {
   if (race.kind === 'timeout') {
     timedOut = true;
     recordStage('killing_tree');
-    // R4-02/R4-03: production cleanup helper (taskkill-based).
+    // R4-02/R4-03 + R5-02..R5-05: production cleanup helper
+    // (taskkill-based, bounded port-close polling, pg_ctl fallback,
+    // TCP connectability confirmation).
     cleanup = await killTreeScoped({
       rootPid: child && child.pid ? child.pid : -1,
       suffixPort: port,
       dataDir,
+      worktreeCwd: WORKER_DIR,
     });
     recordStage('cleanup_result', { ok: cleanup.ok, failureStage: cleanup.failureStage });
     // After taskkill, give the child a bounded final-close race.
@@ -200,29 +205,44 @@ async function runOnce(idx, evidenceRunDir) {
     exitCode = race.code;
     signal = race.signal;
     // Happy path: the test process exited naturally. We still want to
-    // verify the port is gone (R4-03) and the data dir cleaned.
+    // verify the port is gone (R4-03 + R5-02 + R5-03) and the data dir
+    // cleaned. Use bounded polling + a TCP connectability probe so
+    // netstat-stale-but-TCP-live cannot sneak through.
+    const tcpAfterClose = await tcpProbeConnect(port);
     const audit1 = auditLeftovers(port);
     await new Promise((r) => setTimeout(r, AUDIT_GAP_MS));
     const audit2 = auditLeftovers(port);
+    const tcpFinal = await tcpProbeConnect(port);
     cleanup = {
-      ok: audit1.closed === true && audit2.closed === true,
+      ok:
+        audit1.closed === true &&
+        audit2.closed === true &&
+        tcpAfterClose.connectable === false &&
+        tcpFinal.connectable === false,
       rootGone: true,
       portOwner: null,
       audit1,
       audit2,
+      tcpAfterClose,
+      tcpClosed: tcpFinal.connectable === false,
+      tcpProbe: tcpFinal,
       dataDirRemoved: 'pending_outer_cleanup',
       steps: [
         { step: 'taskkill_root', skipped: 'natural_exit' },
         { step: 'netstat_port', available: audit1.available, portHits: audit1.portHits || [] },
         { step: 'taskkill_port_owner', skipped: audit1.closed ? 'port_closed' : 'port_owner_unknown' },
+        { step: 'tcp_probe_after_close', ...tcpAfterClose },
         { step: 'audit1', ...audit1 },
         { step: 'audit2', ...audit2 },
+        { step: 'tcp_probe_final', ...tcpFinal },
       ],
       failureStage:
-        audit1.closed !== true || audit2.closed !== true
+        audit1.closed !== true || audit2.closed !== true || tcpFinal.connectable === true
           ? audit1.closed !== true
             ? 'audit1'
-            : 'audit2'
+            : audit2.closed !== true
+              ? 'audit2'
+              : 'tcp_probe_final'
           : null,
     };
   } else if (race.kind === 'error') {
@@ -385,6 +405,9 @@ const allTeardownClean = runs.every(
     r.cleanup.audit2 &&
     r.cleanup.audit2.closed === true,
 );
+const allTcpClosed = runs.every(
+  (r) => r.cleanup && r.cleanup.tcpClosed === true,
+);
 const allCleanupResult = runs.every(
   (r) => r.cleanup && r.cleanup.ok === true,
 );
@@ -404,6 +427,7 @@ const allClean =
   allPass &&
   allEightScenarios &&
   allTeardownClean &&
+  allTcpClosed &&
   allCleanupResult &&
   allDataDirClean &&
   noForcedExit &&
@@ -441,6 +465,7 @@ const summary = {
   allPass,
   allEightScenarios,
   allTeardownClean,
+  allTcpClosed,
   allCleanupResult,
   allDataDirClean,
   noForcedExit,
@@ -468,6 +493,8 @@ console.log(
     allEightScenarios +
     ' allTeardownClean=' +
     allTeardownClean +
+    ' allTcpClosed=' +
+    allTcpClosed +
     ' allCleanupResult=' +
     allCleanupResult +
     ' allDataDirClean=' +
