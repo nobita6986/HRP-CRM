@@ -40,6 +40,7 @@ import {
   AcknowledgeReminderData,
   GetNextActionData,
   ListDueNextActionsData,
+  SendSyntheticReminderData,
 } from './types.js';
 import { AutomationServiceRegistry } from './connection-registry.js';
 import { KillSwitchStore } from './kill-switch.js';
@@ -520,6 +521,11 @@ export class AutomationGateway {
         organizationId: envelope.organizationId,
         payload: op.payload,
       });
+    } else if (op.op === 'sendSyntheticReminder') {
+      promise = this.adapter.executeSendSyntheticReminder({
+        organizationId: envelope.organizationId,
+        payload: op.payload,
+      });
     } else {
       throw new Error('unreachable: discriminated union');
     }
@@ -541,7 +547,7 @@ export class AutomationGateway {
   ): AutomationWireResponse {
     if (outcome.kind === 'APPLIED') {
       const op = envelope.operation;
-      let data: ListDueNextActionsData | AcknowledgeReminderData | GetNextActionData | null = null;
+      let data: ListDueNextActionsData | AcknowledgeReminderData | GetNextActionData | SendSyntheticReminderData | null = null;
       if (op.op === 'listDueNextActions' && outcome.data && typeof outcome.data === 'object') {
         const d = outcome.data as { items: unknown[]; nextCursor?: string };
         data = {
@@ -564,6 +570,26 @@ export class AutomationGateway {
           schemaVersion: SCHEMA_VERSION,
           item: d.item as GetNextActionData['item'],
           serverNow: new Date(this.now()).toISOString(),
+        };
+      } else if (
+        op.op === 'sendSyntheticReminder' &&
+        outcome.data &&
+        typeof outcome.data === 'object'
+      ) {
+        const d = outcome.data as {
+          nextActionId: string;
+          audienceKind: 'OWNER' | 'SUPERVISOR';
+          redactedRecipientId: string;
+          channel: 'DASHBOARD_ONLY';
+          sentAt: string;
+        };
+        data = {
+          schemaVersion: SCHEMA_VERSION,
+          nextActionId: d.nextActionId,
+          audienceKind: d.audienceKind,
+          redactedRecipientId: d.redactedRecipientId,
+          channel: d.channel,
+          sentAt: d.sentAt,
         };
       }
       if (!data) {

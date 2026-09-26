@@ -70,6 +70,7 @@ export const AUTOMATION_OPERATIONS = [
   'listDueNextActions',
   'acknowledgeReminder',
   'getNextAction',
+  'sendSyntheticReminder',
 ] as const;
 
 export const AutomationOperationNameSchema = z.enum(AUTOMATION_OPERATIONS);
@@ -104,10 +105,31 @@ export const GetNextActionPayloadSchema = z
   })
   .strict();
 
+/**
+ * N8N/1.1 — synthetic-reminder payload.
+ *
+ * Local/mock-only channel. The workflow asks the gateway to record
+ * that an owner/supervisor was reminded about a given NextAction
+ * id; the adapter stores this in-memory and returns a redacted
+ * recipient descriptor. NO canonical state, NO real provider, NO
+ * external side effect. Audit-only.
+ */
+export const SendSyntheticReminderPayloadSchema = z
+  .object({
+    schemaVersion: SchemaVersionSchema,
+    nextActionId: opaqueId('nextActionId', 128),
+    audienceKind: z.enum(['OWNER', 'SUPERVISOR']),
+    redactedRecipientId: opaqueId('redactedRecipientId', 128),
+    channel: z.enum(['DASHBOARD_ONLY']),
+    reminderRevisionId: opaqueId('reminderRevisionId', 128),
+  })
+  .strict();
+
 export const AutomationPayloadSchema = z.discriminatedUnion('op', [
   z.object({ op: z.literal('listDueNextActions'), payload: ListDueNextActionsPayloadSchema }).strict(),
   z.object({ op: z.literal('acknowledgeReminder'), payload: AcknowledgeReminderPayloadSchema }).strict(),
   z.object({ op: z.literal('getNextAction'), payload: GetNextActionPayloadSchema }).strict(),
+  z.object({ op: z.literal('sendSyntheticReminder'), payload: SendSyntheticReminderPayloadSchema }).strict(),
 ]);
 
 /* REQUEST ENVELOPE */
@@ -181,13 +203,32 @@ export const GetNextActionDataSchema = z
   })
   .strict();
 
+/**
+ * N8N/1.1 — synthetic-reminder response data shape. The adapter
+ * returns the redacted recipient descriptor + the timestamp at
+ * which the synthetic reminder was recorded in the in-memory log.
+ * No external channel is invoked.
+ */
+export const SendSyntheticReminderDataSchema = z
+  .object({
+    schemaVersion: SchemaVersionSchema,
+    nextActionId: opaqueId('nextActionId', 128),
+    audienceKind: z.enum(['OWNER', 'SUPERVISOR']),
+    redactedRecipientId: opaqueId('redactedRecipientId', 128),
+    channel: z.enum(['DASHBOARD_ONLY']),
+    sentAt: z.string().datetime({ offset: true }),
+  })
+  .strict();
+
 export type ListDueNextActionsPayload = z.infer<typeof ListDueNextActionsPayloadSchema>;
 export type AcknowledgeReminderPayload = z.infer<typeof AcknowledgeReminderPayloadSchema>;
 export type GetNextActionPayload = z.infer<typeof GetNextActionPayloadSchema>;
+export type SendSyntheticReminderPayload = z.infer<typeof SendSyntheticReminderPayloadSchema>;
 export type DueNextActionItem = z.infer<typeof DueNextActionItemSchema>;
 export type ListDueNextActionsData = z.infer<typeof ListDueNextActionsDataSchema>;
 export type AcknowledgeReminderData = z.infer<typeof AcknowledgeReminderDataSchema>;
 export type GetNextActionData = z.infer<typeof GetNextActionDataSchema>;
+export type SendSyntheticReminderData = z.infer<typeof SendSyntheticReminderDataSchema>;
 
 /* SERVICE IDENTITY */
 

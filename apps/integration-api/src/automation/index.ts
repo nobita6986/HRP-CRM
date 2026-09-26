@@ -31,10 +31,12 @@ export {
   ListDueNextActionsPayloadSchema,
   AcknowledgeReminderPayloadSchema,
   GetNextActionPayloadSchema,
+  SendSyntheticReminderPayloadSchema,
   DueNextActionItemSchema,
   ListDueNextActionsDataSchema,
   AcknowledgeReminderDataSchema,
   GetNextActionDataSchema,
+  SendSyntheticReminderDataSchema,
   getAutomationGatewayError,
   makeAutomationError,
 } from './types.js';
@@ -60,7 +62,13 @@ export {
 } from './digest.js';
 
 export { MockAutomationAdapter } from './mock-adapter.js';
-export type { AutomationAdapter, MockAdapterOptions, AdapterOutcome, ListDueFixture } from './mock-adapter.js';
+export type {
+  AutomationAdapter,
+  MockAdapterOptions,
+  AdapterOutcome,
+  ListDueFixture,
+  ReminderLogEntry,
+} from './mock-adapter.js';
 
 export { AutomationGateway } from './gateway.js';
 export type { AutomationGatewayDeps, GatewayInvokeArgs, GatewayInvokeResult, RedactedLogEntry } from './gateway.js';

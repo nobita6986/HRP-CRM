@@ -26,6 +26,7 @@ import {
   AcknowledgeReminderPayload,
   GetNextActionPayload,
   ListDueNextActionsPayload,
+  SendSyntheticReminderPayload,
 } from './types.js';
 import { DependencyOfflineError, TimeoutError } from './errors.js';
 
@@ -37,6 +38,23 @@ export type AdapterOutcome<TData> =
 export interface ListDueFixture {
   items: ReadonlyArray<DueNextActionItem>;
   nextCursor?: string;
+}
+
+/**
+ * N8N/1.1 — in-memory log of synthetic-reminder deliveries. Each entry
+ * is what the adapter saw: which NextAction id, which audience
+ * (OWNER/SUPERVISOR), which redacted recipient id, which channel,
+ * which revision. This log is NEVER persisted beyond the process.
+ */
+export interface ReminderLogEntry {
+  readonly organizationId: string;
+  readonly connectionId: string;
+  readonly nextActionId: string;
+  readonly audienceKind: 'OWNER' | 'SUPERVISOR';
+  readonly redactedRecipientId: string;
+  readonly channel: 'DASHBOARD_ONLY';
+  readonly reminderRevisionId: string;
+  readonly sentAt: string;
 }
 
 export interface MockAdapterOptions {
@@ -79,6 +97,22 @@ export interface AutomationAdapter {
       payload: GetNextActionPayload;
     },
   ): Promise<AdapterOutcome<{ item: DueNextActionItem }>>;
+  /**
+   * N8N/1.1 — record a synthetic reminder delivery. The mock adapter
+   * appends to an in-memory log; no external side effect, no
+   * canonical-state mutation.
+   */
+  executeSendSyntheticReminder(
+    args: { organizationId: string; payload: SendSyntheticReminderPayload },
+  ): Promise<
+    AdapterOutcome<{
+      nextActionId: string;
+      audienceKind: 'OWNER' | 'SUPERVISOR';
+      redactedRecipientId: string;
+      channel: 'DASHBOARD_ONLY';
+      sentAt: string;
+    }>
+  >;
 }
 
 export class MockAutomationAdapter implements AutomationAdapter {
@@ -87,6 +121,7 @@ export class MockAutomationAdapter implements AutomationAdapter {
   private readonly now: () => number;
   private readonly listDueItems: DueNextActionItem[];
   private readonly getById: Map<string, DueNextActionItem>;
+  private readonly reminderLog: ReminderLogEntry[];
   private readonly skipOrgGate: boolean;
   private simulateOfflineUntil = 0;
   private nextCallTimesOut = false;
@@ -105,6 +140,7 @@ export class MockAutomationAdapter implements AutomationAdapter {
         this.getById.set(k, v);
       }
     }
+    this.reminderLog = [];
   }
 
   /**
@@ -133,6 +169,14 @@ export class MockAutomationAdapter implements AutomationAdapter {
    */
   simulateTimeoutOnce(): void {
     this.nextCallTimesOut = true;
+  }
+
+  /**
+   * Read the in-memory synthetic-reminder log. Tests assert that no
+   * canonical state mutated and that delivery records exist.
+   */
+  readReminderLog(): ReadonlyArray<ReminderLogEntry> {
+    return this.reminderLog.slice();
   }
 
   private gate(organizationId: string): void {
@@ -216,6 +260,43 @@ export class MockAutomationAdapter implements AutomationAdapter {
     return {
       kind: 'APPLIED',
       data: { item },
+    };
+  }
+
+  async executeSendSyntheticReminder(args: {
+    organizationId: string;
+    payload: SendSyntheticReminderPayload;
+  }): Promise<
+    AdapterOutcome<{
+      nextActionId: string;
+      audienceKind: 'OWNER' | 'SUPERVISOR';
+      redactedRecipientId: string;
+      channel: 'DASHBOARD_ONLY';
+      sentAt: string;
+    }>
+  > {
+    this.gate(args.organizationId);
+    const sentAt = new Date(this.now()).toISOString();
+    const entry: ReminderLogEntry = {
+      organizationId: args.organizationId,
+      connectionId: this.connectionId,
+      nextActionId: args.payload.nextActionId,
+      audienceKind: args.payload.audienceKind,
+      redactedRecipientId: args.payload.redactedRecipientId,
+      channel: args.payload.channel,
+      reminderRevisionId: args.payload.reminderRevisionId,
+      sentAt,
+    };
+    this.reminderLog.push(entry);
+    return {
+      kind: 'APPLIED',
+      data: {
+        nextActionId: args.payload.nextActionId,
+        audienceKind: args.payload.audienceKind,
+        redactedRecipientId: args.payload.redactedRecipientId,
+        channel: args.payload.channel,
+        sentAt,
+      },
     };
   }
 }

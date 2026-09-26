@@ -1,5 +1,5 @@
 {
-  "name": "n8n-0.2-sla-reminder-crm-inactive",
+  "name": "n8n-1.1-sla-reminder-crm-local-mock",
   "nodes": [
     {
       "parameters": {
@@ -16,20 +16,49 @@
       "name": "Schedule Trigger (every 15m)",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [240, 200],
+      "position": [
+        240,
+        200
+      ],
       "disabled": false,
       "notesInFlow": false,
       "notes": "Synth reminder schedule. Service identity injected from n8n credentials store by ID 'CRM_AUTOMATION_HMAC'. Workflow does NOT store raw secrets."
     },
     {
       "parameters": {
-        "functionCode": "/*\n * Build Automation Gateway request envelope for listDueNextActions.\n * - organizationId, connectionId, serviceId are bound server-side; body is a claim, never trusted alone.\n * - workflowId, workflowRevision, n8nExecutionId are computed inside the n8n host; we read them from $workflow and $execution.\n * - idempotencyKey is stable for the same wall-clock window so retries dedupe at the gateway.\n * - correlationId rides the whole flow; it is tracking only (digest excludes it on purpose).\n */\nconst slug = (s) => String(s || '').replace(/[^A-Za-z0-9._:-]/g, '').slice(0, 128);\nconst idem = 'sla-' + (new Date()).toISOString().slice(0, 16).replace(/[-:T]/g, '');\nconst envelope = {\n  schemaVersion: '1',\n  commandId: 'cmd-' + idem,\n  commandName: 'listDueNextActions',\n  idempotencyKey: idem,\n  correlationId: 'corr-' + idem + '-' + Math.random().toString(36).slice(2, 10),\n  organizationId: $env.HRP_AUTOMATION_ORG_ID,\n  source: { kind: 'HRP_UI', provider: 'HRP_UI', connectionId: null },\n  actor: { kind: 'SERVICE', serviceId: $env.HRP_AUTOMATION_SERVICE_ID },\n  occurredAt: new Date().toISOString(),\n  automationSource: {\n    kind: 'N8N_AUTOMATION',\n    workflowId: slug($workflow.id),\n    workflowRevision: 1,\n    n8nExecutionId: slug($execution.id),\n    workflowLabel: 'sla-reminder-crm'\n  },\n  operation: {\n    op: 'listDueNextActions',\n    payload: {\n      schemaVersion: '1',\n      statusFilter: 'OVERDUE_ONLY',\n      pageSize: 50\n    }\n  }\n};\nconst rawBody = JSON.stringify(envelope);\nreturn [\n  {\n    json: {\n      envelope: envelope,\n      rawBody: rawBody,\n      credentialId: 'CRM_AUTOMATION_HMAC'\n    }\n  }\n];\n"
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "cronExpression": "0 0 9 * * *"
+            }
+          ]
+        }
+      },
+      "id": "trigger-daily-digest-0900",
+      "name": "Schedule Trigger (daily digest 09:00 ICT)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        360
+      ],
+      "disabled": false,
+      "notesInFlow": false,
+      "notes": "Daily morning digest. Reuses the same downstream flow as the 15-min trigger but groups items by (organization, owner, supervisor, slaBucket). idempotencyKey window is per (workflowLabel, day) so the 15-min schedule and the digest do not double-notify the same logical reminder (AC #15)."
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n * Build Automation Gateway request envelope for listDueNextActions.\n * - organizationId, connectionId, serviceId are bound server-side; body is a claim, never trusted alone.\n * - workflowId, workflowRevision, n8nExecutionId are computed inside the n8n host; we read them from $workflow and $execution.\n * - idempotencyKey is stable for the same wall-clock window so retries dedupe at the gateway.\n * - correlationId rides the whole flow; it is tracking only.\n * - triggerLabel: 'TICK_15M' | 'DAILY_DIGEST' selects the workflow revision branch.\n */\nconst slug = (s) => String(s || '').replace(/[^A-Za-z0-9._:-]/g, '').slice(0, 128);\nconst idemWindow = 'sla-' + (new Date()).toISOString().slice(0, 16).replace(/[-:T]/g, '');\nconst triggerLabel = ($env.N8N_TRIGGER_LABEL || 'TICK_15M');\nconst envelope = {\n  schemaVersion: '1',\n  commandId: ('cmd-' + idemWindow).slice(0, 64),\n  commandName: 'listDueNextActions',\n  idempotencyKey: idemWindow,\n  correlationId: 'corr-' + idemWindow + '-' + Math.random().toString(36).slice(2, 10),\n  organizationId: $env.HRP_AUTOMATION_ORG_ID,\n  source: { kind: 'HRP_UI', provider: 'HRP_UI', connectionId: null },\n  actor: { kind: 'SERVICE', serviceId: $env.HRP_AUTOMATION_SERVICE_ID },\n  occurredAt: new Date().toISOString(),\n  automationSource: {\n    kind: 'N8N_AUTOMATION',\n    workflowId: slug($workflow.id),\n    workflowRevision: 2,\n    n8nExecutionId: slug($execution.id),\n    workflowLabel: 'sla-reminder-crm',\n    sourceEventId: triggerLabel\n  },\n  operation: {\n    op: 'listDueNextActions',\n    payload: {\n      schemaVersion: '1',\n      statusFilter: 'OPEN_OR_DUE',\n      pageSize: 200\n    }\n  }\n};\nconst rawBody = JSON.stringify(envelope);\nreturn [\n  {\n    json: {\n      envelope: envelope,\n      rawBody: rawBody,\n      credentialId: 'CRM_AUTOMATION_HMAC',\n      triggerLabel: triggerLabel\n    }\n  }\n];\n"
       },
       "id": "function-build-envelope",
       "name": "Build envelope (listDueNextActions)",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
-      "position": [460, 200],
+      "position": [
+        460,
+        280
+      ],
       "disabled": false,
       "notesInFlow": false,
       "notes": "No raw body, PII, or secret in the envelope. Body is the claim; signing happens in HTTP Request node."
@@ -37,13 +66,22 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$env.HRP_AUTOMATION_GATEWAY_URL}}/v1/automation/listDueNextActions",
+        "url": "={{$env.HRP_AUTOMATION_GATEWAY_URL}}/v1/automation/dispatch",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Content-Type", "value": "application/json" },
-            { "name": "X-Automation-Source", "value": "n8n" },
-            { "name": "X-Automation-Workflow", "value": "={{$node[\"function-build-envelope\"].json.envelope.automationSource.workflowId}}" }
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Automation-Source",
+              "value": "n8n"
+            },
+            {
+              "name": "X-Automation-Workflow",
+              "value": "={{$node[\"Build envelope (listDueNextActions)\"].json.envelope.automationSource.workflowId}}"
+            }
           ]
         },
         "sendBody": true,
@@ -51,7 +89,7 @@
           "parameters": []
         },
         "specifyBody": "json",
-        "jsonBody": "={{$node[\"function-build-envelope\"].json.envelope}}",
+        "jsonBody": "={{$node[\"Build envelope (listDueNextActions)\"].json.envelope}}",
         "options": {
           "timeout": 5000,
           "response": {
@@ -66,35 +104,118 @@
           "name": "CRM_AUTOMATION_HMAC"
         }
       },
-      "id": "http-call-gateway",
-      "name": "POST /v1/automation/listDueNextActions",
+      "id": "http-call-gateway-list",
+      "name": "POST /v1/automation/dispatch (listDueNextActions)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [680, 200],
+      "position": [
+        680,
+        280
+      ],
       "disabled": false,
       "notesInFlow": false,
-      "notes": "HMAC signature injected via HMAC credential helper (NOT raw secret). Timeout 5s, 1 retry max, body is the envelope from previous node. REDACTED wire response never carries actor or source."
+      "notes": "HMAC signature injected via HMAC credential helper (NOT raw secret). Timeout 5s, no infinite retry (idempotency-key dedupe handles retry). REDACTED wire response never carries actor or source."
     },
     {
       "parameters": {
-        "functionCode": "/*\n * Group reminder items by assignedToRedacted and acknowledge each batch via the gateway.\n * Acknowledgement is AUDIT-ONLY; it does NOT mutate NextAction status (Plan N8N/1.1 ranh giới).\n * If status != 'APPLIED' we surface the redacted error code; we never log the response body verbatim.\n */\nconst items = ($input.first().json && $input.first().json.data && $input.first().json.data.items) || [];\nconst acks = [];\nconst owners = new Set(items.map((it) => it.assignedToRedacted));\nfor (const owner of owners) {\n  acks.push({\n    json: {\n      envelope: {\n        schemaVersion: '1',\n        commandId: 'cmd-ack-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),\n        commandName: 'acknowledgeReminder',\n        idempotencyKey: 'ack-' + owner + '-' + new Date().toISOString().slice(0, 16).replace(/[-:T]/g, ''),\n        correlationId: $input.first().json.envelope ? $input.first().json.envelope.correlationId : 'corr-' + Date.now(),\n        organizationId: $env.HRP_AUTOMATION_ORG_ID,\n        source: { kind: 'HRP_UI', provider: 'HRP_UI', connectionId: null },\n        actor: { kind: 'SERVICE', serviceId: $env.HRP_AUTOMATION_SERVICE_ID },\n        automationSource: {\n          kind: 'N8N_AUTOMATION',\n          workflowId: ($input.first().json.envelope && $input.first().json.envelope.automationSource && $input.first().json.envelope.automationSource.workflowId) || 'sla-reminder',\n          workflowRevision: 1,\n          n8nExecutionId: ($input.first().json.envelope && $input.first().json.envelope.automationSource && $input.first().json.envelope.automationSource.n8nExecutionId) || 'exec-' + Date.now(),\n          workflowLabel: 'sla-reminder-crm'\n        },\n        operation: {\n          op: 'acknowledgeReminder',\n          payload: {\n            schemaVersion: '1',\n            nextActionId: 'batch-' + owner,\n            notificationOutcome: 'SENT',\n            reminderRevisionId: 'rev-' + new Date().toISOString().slice(0, 10),\n            channel: 'DASHBOARD_ONLY'\n          }\n        }\n      }\n    }\n  });\n}\nreturn acks;\n"
+        "functionCode": "/*\n * Filter due-list response:\n *   - DROP status === 'CANCELLED' or 'DONE' (never notify finished items).\n *   - DROP snoozeMode === 'SNOOZED' (snooze affects ONLY notification, not SLA / canonical state).\n *     Items that are snoozed remain in the SLA bucket for the orchestrator, but this workflow\n *     does NOT send a notification for them. The 15-min tick and the daily digest must produce\n *     the SAME logical bucket for the SAME (item, day) so the dedupe key is stable.\n *   - BUCKET each surviving item into an slaBucket based on time-to-dueAt:\n *       DUE_SOON : 0 < dueAt - now <= 60 minutes\n *       DUE      :  dueAt - now <= 0\n *       OVERDUE  :  dueAt - now  < 0\n *     N8N/1.1 takes DUE and OVERDUE together as 'overdue' for escalation; the bucket label is\n *     preserved in the group key so the daily digest can show separate totals.\n */\n/* organizationId is server-resolved (registry bound) for this run; the workflow\n   never treats the body as authority. The supervisor lookup is a redacted-id map\n   from $env.N8N_FIXTURE_SUPERVISOR_MAP (JSON object: assignedToRedacted -> supervisorRedacted).\n   If the supervisor is missing for an owner, group falls through to FALLBACK (no misroute, AC #5). */\nconst __in = $input.first().json || {};\nconst items = (__in.items || (__in.data && __in.data.items)) || [];\nconst triggerLabel = ($node[\"Build envelope (listDueNextActions)\"].json.triggerLabel || 'TICK_15M');\nconst orgId = ($node[\"Build envelope (listDueNextActions)\"].json.envelope.organizationId) || 'unknown-org';\nlet supervisorMap = {};\ntry { supervisorMap = JSON.parse($env.N8N_FIXTURE_SUPERVISOR_MAP || '{}'); } catch (_e) { supervisorMap = {}; }\nconst now = Date.now();\nconst buckets = { DUE_SOON: [], DUE: [], OVERDUE: [] };\nfor (const it of items) {\n  if (it.status !== 'OPEN') continue;\n  if (it.snoozeMode === 'SNOOZED') continue;\n  const dt = Date.parse(it.dueAt) - now;\n  let bucket;\n  if (dt <= 0) bucket = 'OVERDUE';\n  else if (dt <= 60 * 60 * 1000) bucket = 'DUE_SOON';\n  else continue; /* not due yet; skip */\n  buckets[bucket].push(it);\n}\n/* Group by (organization, owner, supervisor, slaBucket) — recipient keys are redacted ids from the wire. */\nconst groups = {};\nfor (const bucketName of Object.keys(buckets)) {\n  for (const it of buckets[bucketName]) {\n    const supervisorKey = (supervisorMap[it.assignedToRedacted] || it.supervisorRedacted || 'NONE');\n    const keyOrg = orgId;\n    const keyOwner = it.assignedToRedacted || 'NONE';\n    const key = [keyOrg, keyOwner, supervisorKey, bucketName].join('|');\n    if (!groups[key]) {\n      groups[key] = {\n        organizationId: keyOrg,\n        ownerRedacted: keyOwner,\n        supervisorRedacted: supervisorKey,\n        slaBucket: bucketName,\n        itemIds: [],\n        firstDueAt: it.dueAt\n      };\n    }\n    groups[key].itemIds.push(it.nextActionId);\n    if (Date.parse(it.dueAt) < Date.parse(groups[key].firstDueAt)) {\n      groups[key].firstDueAt = it.dueAt;\n    }\n  }\n}\nreturn [\n  {\n    json: {\n      triggerLabel: triggerLabel,\n      correlationId: $node[\"Build envelope (listDueNextActions)\"].json.envelope.correlationId,\n      totalSeen: items.length,\n      totalKept: Object.values(groups).reduce((acc, g) => acc + g.itemIds.length, 0),\n      groups: Object.values(groups),\n      noItems: items.length === 0\n    }\n  }\n];\n"
       },
-      "id": "function-batch-ack",
-      "name": "Build acknowledgement batches",
+      "id": "function-group",
+      "name": "Filter + Group (snooze, slaBucket)",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
-      "position": [900, 200],
+      "position": [
+        900,
+        280
+      ],
       "disabled": false,
-      "notesInFlow": false
+      "notesInFlow": false,
+      "notes": "Drop SNOOZED and DONE/CANCELLED. Group by (organization, owner, supervisor, slaBucket). Snooze does NOT mutate SLA or canonical state (N8N/1.1 boundary rule)."
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n * Build ONE sendSyntheticReminder envelope per group.\n * Audience is SUPERVISOR if slaBucket === 'OVERDUE' AND a supervisor is present, else OWNER.\n * If neither owner nor supervisor is present, this group is routed to the FALLBACK review\n * branch (no notification, no misroute).\n *\n * idempotencyKey is stable per (groupKey, day, workflowRevision) so:\n *   - 15-min tick + daily digest converge to the same key (AC #15, no double notify).\n *   - gateway-side replay returns the cached APPLIED result (AC #6, idempotency).\n */\nconst group = $input.first().json;\nconst groups = group.groups || [];\nconst out = [];\nconst correlationId = group.correlationId;\nconst dayKey = (new Date()).toISOString().slice(0, 10).replace(/[-]/g, '');\nfor (const g of groups) {\n  const escalate = g.slaBucket === 'OVERDUE' && g.supervisorRedacted && g.supervisorRedacted !== 'NONE';\n  const audience = escalate ? 'SUPERVISOR' : 'OWNER';\n  const recipient = escalate ? g.supervisorRedacted : g.ownerRedacted;\n  if (!recipient || recipient === 'NONE') {\n    out.push({ json: { kind: 'fallback', group: g, correlationId: correlationId, reason: 'no_owner_or_supervisor' } });\n    continue;\n  }\n  const groupKey = [g.organizationId, audience, recipient, g.slaBucket].join('|');\n  const idem = 'rem-' + dayKey + '-' + groupKey.replace(/[^A-Za-z0-9._:-]/g, '-').slice(0, 96);\n  out.push({\n    json: {\n      kind: 'send',\n      envelope: {\n        schemaVersion: '1',\n        commandId: ('cmd-' + idem + '-' + Math.random().toString(36).slice(2, 6)).slice(0, 64),\n        commandName: 'sendSyntheticReminder',\n        idempotencyKey: idem,\n        correlationId: correlationId,\n        organizationId: g.organizationId,\n        source: { kind: 'HRP_UI', provider: 'HRP_UI', connectionId: null },\n        actor: { kind: 'SERVICE', serviceId: $env.HRP_AUTOMATION_SERVICE_ID },\n        automationSource: {\n          kind: 'N8N_AUTOMATION',\n          workflowId: ($workflow.id),\n          workflowRevision: 2,\n          n8nExecutionId: ($execution.id),\n          workflowLabel: 'sla-reminder-crm'\n        },\n        operation: {\n          op: 'sendSyntheticReminder',\n          payload: {\n            schemaVersion: '1',\n            nextActionId: g.itemIds[0],\n            audienceKind: audience,\n            redactedRecipientId: recipient,\n            channel: 'DASHBOARD_ONLY',\n            reminderRevisionId: 'rev-' + dayKey + '-' + g.slaBucket\n          }\n        }\n      },\n      fallback: null,\n      group: g\n    }\n  });\n}\nreturn out;\n"
+      },
+      "id": "function-build-send",
+      "name": "Build sendSyntheticReminder batches",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        280
+      ],
+      "disabled": false,
+      "notesInFlow": false,
+      "notes": "OVERDUE -> audience=SUPERVISOR (escalation, AC #3). No owner AND no supervisor -> FALLBACK, NOT misrouted (AC #5)."
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$env.HRP_AUTOMATION_GATEWAY_URL}}/v1/automation/acknowledgeReminder",
+        "url": "={{$env.HRP_AUTOMATION_GATEWAY_URL}}/v1/automation/dispatch",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Content-Type", "value": "application/json" }
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "specifyBody": "json",
+        "jsonBody": "={{$json.envelope}}",
+        "options": {
+          "timeout": 5000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "httpNodeCredential": {
+          "id": "CRM_AUTOMATION_HMAC",
+          "name": "CRM_AUTOMATION_HMAC"
+        }
+      },
+      "id": "http-send-reminder",
+      "name": "POST /v1/automation/dispatch (sendSyntheticReminder)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1340,
+        200
+      ],
+      "disabled": false,
+      "notesInFlow": false,
+      "notes": "Per-group sendSyntheticReminder call. Idempotency key is per (group, day, workflowRevision). Timeout 5s. Same key + same payload returns cached APPLIED (AC #6). Same key + different payload returns 409 IDEMPOTENCY_CONFLICT (AC #7)."
+    },
+    {
+      "parameters": {
+        "functionCode": "/*\n * Build acknowledgement batches. AC #11: correlationId and n8nExecutionId MUST match the original\n * listDueNextActions call exactly; outcome is the wire status we just received, mapped to a\n * redacted outcome enum (SENT / FAILED / SKIPPED). We never include the raw wire body or any PII.\n *\n * Note: sendSyntheticReminder failure is acknowledged as FAILED; the gateway records it but does\n * not retry (no infinite retry, AC #8). Mock adapter offline returns a frozen 503 envelope\n * (AC #10) and is acknowledged as SKIPPED so the daily digest can re-attempt the next day.\n */\nconst sends = $input.all();\nconst acks = [];\nfor (const item of sends) {\n  const it = item.json || {};\n  if (it.kind === 'fallback') {\n    /* No notification was sent; record a SKIPPED ack so the dedupe key is bound. */\n    acks.push({\n      json: {\n        envelope: {\n          schemaVersion: '1',\n          commandId: 'cmd-ack-skip-' + Math.random().toString(36).slice(2, 8),\n          commandName: 'acknowledgeReminder',\n          idempotencyKey: 'ack-skip-' + (it.group.organizationId || 'unknown') + '-' + Date.now().toString(36),\n          correlationId: it.correlationId,\n          organizationId: it.group.organizationId || $env.HRP_AUTOMATION_ORG_ID,\n          source: { kind: 'HRP_UI', provider: 'HRP_UI', connectionId: null },\n          actor: { kind: 'SERVICE', serviceId: $env.HRP_AUTOMATION_SERVICE_ID },\n          automationSource: {\n            kind: 'N8N_AUTOMATION',\n            workflowId: ($workflow.id),\n            workflowRevision: 2,\n            n8nExecutionId: ($execution.id),\n            workflowLabel: 'sla-reminder-crm'\n          },\n          operation: {\n            op: 'acknowledgeReminder',\n            payload: {\n              schemaVersion: '1',\n              nextActionId: 'batch-' + (it.group.organizationId || 'unknown') + '-' + it.group.slaBucket,\n              notificationOutcome: 'SKIPPED',\n              reminderRevisionId: 'rev-skip-' + Date.now().toString(36),\n              channel: 'DASHBOARD_ONLY'\n            }\n          }\n        }\n      }\n    });\n    continue;\n  }\n  const sent = it.envelope || null;\n  const wire = (item.json && item.json.wireStatus) || null;\n  const outcome = wire === 'APPLIED' ? 'SENT' : (wire === 'SKIPPED' ? 'SKIPPED' : 'FAILED');\n  if (!sent) {\n    acks.push({ json: { envelope: { schemaVersion: '1', commandId: 'cmd-ack-skip-' + Math.random().toString(36).slice(2, 8), commandName: 'acknowledgeReminder', idempotencyKey: 'ack-skip-' + (it.group ? it.group.organizationId : 'unknown') + '-' + (it.group ? it.group.slaBucket : 'NONE'), correlationId: it.correlationId, organizationId: it.group ? it.group.organizationId : $env.HRP_AUTOMATION_ORG_ID, source: { kind: 'HRP_UI', provider: 'HRP_UI', connectionId: null }, actor: { kind: 'SERVICE', serviceId: $env.HRP_AUTOMATION_SERVICE_ID }, automationSource: { kind: 'N8N_AUTOMATION', workflowId: ($workflow.id), workflowRevision: 2, n8nExecutionId: ($execution.id), workflowLabel: 'sla-reminder-crm' }, operation: { op: 'acknowledgeReminder', payload: { schemaVersion: '1', nextActionId: 'batch-' + (it.group ? it.group.organizationId : 'unknown'), notificationOutcome: 'SKIPPED', reminderRevisionId: 'rev-skip', channel: 'DASHBOARD_ONLY' } } } } });\n    continue;\n  }\n  acks.push({\n    json: {\n      envelope: {\n        schemaVersion: '1',\n        commandId: 'cmd-ack-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6),\n        commandName: 'acknowledgeReminder',\n        idempotencyKey: 'ack-' + sent.idempotencyKey,\n        correlationId: sent.correlationId,\n        organizationId: sent.organizationId,\n        source: { kind: 'HRP_UI', provider: 'HRP_UI', connectionId: null },\n        actor: { kind: 'SERVICE', serviceId: $env.HRP_AUTOMATION_SERVICE_ID },\n        automationSource: {\n          kind: 'N8N_AUTOMATION',\n          workflowId: ($workflow.id),\n          workflowRevision: 2,\n          n8nExecutionId: ($execution.id),\n          workflowLabel: 'sla-reminder-crm'\n        },\n        operation: {\n          op: 'acknowledgeReminder',\n          payload: {\n            schemaVersion: '1',\n            nextActionId: sent.operation.payload.nextActionId,\n            notificationOutcome: outcome,\n            reminderRevisionId: sent.operation.payload.reminderRevisionId,\n            channel: 'DASHBOARD_ONLY'\n          }\n        }\n      }\n    }\n  });\n}\nreturn acks;\n"
+      },
+      "id": "function-build-ack",
+      "name": "Build acknowledgement batches",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1560,
+        280
+      ],
+      "disabled": false,
+      "notesInFlow": false,
+      "notes": "Acknowledgement is audit-only; does NOT mutate NextAction state (N8N/1.1 boundary)."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.HRP_AUTOMATION_GATEWAY_URL}}/v1/automation/dispatch",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
           ]
         },
         "specifyBody": "json",
@@ -114,25 +235,31 @@
         }
       },
       "id": "http-ack",
-      "name": "POST /v1/automation/acknowledgeReminder",
+      "name": "POST /v1/automation/dispatch (acknowledgeReminder)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1120, 200],
+      "position": [
+        1780,
+        280
+      ],
       "disabled": false,
       "notesInFlow": false,
-      "notes": "Per-item acknowledgement. Idempotency key is per (owner, day) so daily replay dedupes. Timeout 5s."
+      "notes": "Per-group acknowledgement. Idempotency key is per reminder so retries dedupe at the gateway. Timeout 5s, no infinite retry (AC #8)."
     },
     {
       "parameters": {
-        "content": "## n8n/0.2 — Follow-up / SLA Reminder (INACTIVE DESIGN)\n\n- Calls CRM Automation Gateway (listDueNextActions + acknowledgeReminder) ONLY.\n- body organizationId/connectionId are resolved server-side; workflow cannot spoof.\n- Local-only credential reference id; raw secret stays in n8n credentials store.\n- Timeout 5s per call. Idempotency dedupes by 16-minute window.\n- Acknowledgement is audit-only; does NOT mutate NextAction status.\n\nINSTRUCTIONS:\n- DO NOT IMPORT into n8n until T0 issues the import command and HRP_AUTOMATION_* env vars + CRM_AUTOMATION_HMAC credential are provisioned by the operator.\n- This file is a designed artifact; see docs/contracts/n8n/N8N-0.2/WORKFLOW.md for the contract and activation criteria.",
-        "height": 280,
-        "width": 360
+        "content": "## n8n/1.1 — Follow-up / SLA Reminder (LOCAL/MOCK PoC)\n\nReuses the N8N/0.3 frozen HTTP boundary: POST /v1/automation/dispatch.\n\nFlow:\n  1. Trigger: 15-min tick OR daily 09:00 ICT digest (separate trigger nodes).\n  2. Build envelope (listDueNextActions).\n  3. Call /v1/automation/dispatch (HMAC via CRM_AUTOMATION_HMAC).\n  4. Filter snoozeMode==SNOOZED and status!=OPEN; bucket DUE_SOON / OVERDUE.\n  5. Group by (organization, owner, supervisor, slaBucket).\n  6. Escalation: OVERDUE + supervisor present -> audience=SUPERVISOR.\n     No owner AND no supervisor -> FALLBACK (no notification, no misroute).\n  7. Call /v1/automation/dispatch (sendSyntheticReminder) per group.\n  8. Build acknowledgement envelopes with same correlationId + n8nExecutionId.\n  9. Call /v1/automation/dispatch (acknowledgeReminder).\n\nBoundaries:\n  - body organizationId is NEVER authority; registry-resolved org/conn wins.\n  - Workflow never touches NextAction state, Handling SLA, canonical state.\n  - Snooze affects notification ONLY; SLA/canonical unchanged.\n  - All 15 acceptance cases (AC #1..AC #15) are covered by focused tests.\n  - Logs are redacted; no secret, signature, raw body, or PII leaks.\n  - Synthetic channel only (DASHBOARD_ONLY); no email/SMS/Zalo/Chatwoot.\n  - No infinite retry; idempotency-key dedupe handles retry; kill switch fail-closed.\n\nLOCAL ONLY:\n  - This JSON is exercised by a Node-based local runner/simulator in apps/n8n-workflows/local-runner.mjs.\n  - DO NOT IMPORT into the n8n CRM instance until T0 issues the import command and the\n    HRP_AUTOMATION_* env vars + CRM_AUTOMATION_HMAC credential are provisioned by the operator.\n  - LOCAL_SIMULATOR_VERIFIED, not N8N_RUNTIME_VERIFIED. The simulator walks the JSON node\n    graph and drives the actual integration-api HTTP boundary. JSON_STRUCTURE_VERIFIED.",
+        "height": 320,
+        "width": 420
       },
       "id": "sticky-note-context",
       "name": "Workflow notes",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [240, 360],
+      "position": [
+        240,
+        460
+      ],
       "disabled": false,
       "notesInFlow": false
     }
@@ -141,28 +268,93 @@
     "Schedule Trigger (every 15m)": {
       "main": [
         [
-          { "node": "Build envelope (listDueNextActions)", "type": "main", "index": 0 }
+          {
+            "node": "Build envelope (listDueNextActions)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger (daily digest 09:00 ICT)": {
+      "main": [
+        [
+          {
+            "node": "Build envelope (listDueNextActions)",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Build envelope (listDueNextActions)": {
       "main": [
         [
-          { "node": "POST /v1/automation/listDueNextActions", "type": "main", "index": 0 }
+          {
+            "node": "POST /v1/automation/dispatch (listDueNextActions)",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
-    "POST /v1/automation/listDueNextActions": {
+    "POST /v1/automation/dispatch (listDueNextActions)": {
       "main": [
         [
-          { "node": "Build acknowledgement batches", "type": "main", "index": 0 }
+          {
+            "node": "Filter + Group (snooze, slaBucket)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter + Group (snooze, slaBucket)": {
+      "main": [
+        [
+          {
+            "node": "Build sendSyntheticReminder batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build sendSyntheticReminder batches": {
+      "main": [
+        [
+          {
+            "node": "POST /v1/automation/dispatch (sendSyntheticReminder)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Build acknowledgement batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST /v1/automation/dispatch (sendSyntheticReminder)": {
+      "main": [
+        [
+          {
+            "node": "Build acknowledgement batches",
+            "type": "main",
+            "index": 1
+          }
         ]
       ]
     },
     "Build acknowledgement batches": {
       "main": [
         [
-          { "node": "POST /v1/automation/acknowledgeReminder", "type": "main", "index": 0 }
+          {
+            "node": "POST /v1/automation/dispatch (acknowledgeReminder)",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     }
@@ -177,16 +369,30 @@
     "timezone": "Asia/Ho_Chi_Minh",
     "errorWorkflow": "n8n-error-notifier-TBD"
   },
-  "id": "n8n-sla-reminder-crm-inactive",
+  "id": "n8n-sla-reminder-crm-local-mock",
   "meta": {
     "instanceId": "n8n-crm-instance-TBD",
     "templateCredsSetupCompleted": false
   },
   "tags": [
-    { "name": "n8n-0.2" },
-    { "name": "crm-automation" },
-    { "name": "inactive-design" },
-    { "name": "no-import-without-T0" }
+    {
+      "name": "n8n-1.1"
+    },
+    {
+      "name": "crm-automation"
+    },
+    {
+      "name": "local-mock"
+    },
+    {
+      "name": "no-import-without-T0"
+    },
+    {
+      "name": "sla-reminder"
+    },
+    {
+      "name": "follow-up"
+    }
   ],
   "pinData": {}
 }

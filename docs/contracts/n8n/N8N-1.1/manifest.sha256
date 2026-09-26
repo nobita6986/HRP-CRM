@@ -1,0 +1,14 @@
+96993034dd056816b3abe736fdccbe2427e9e2884abcb84d4a743c747b6f38bc  apps/n8n-workflows/sla-reminder.v1.json
+3fda386fb63d694b266e7ee8cd1157135a6bb2988959507a6e8809e36b9574fd  apps/n8n-workflows/local-runner.mjs
+decac8e1bcd9879df48cba7c267cdfffcdb5d56a0fa3bc3b27c7d5ff4ed11d5f  apps/integration-api/tests/automation-n8n11-sla-reminder.test.mjs
+a3ba18e1866688cb93927dce5c05cfb4db5e3f74571fa481c751ac9b8dc2ca76  apps/integration-api/src/automation/gateway.ts
+e8e2284cd9cf3decd25efb1064ebb4251e8f072ff168baabe1be8a9f610fcded  apps/integration-api/src/automation/index.ts
+5999cf99c8750a97a84d548e3cf49fce1d5c9d66ff06ce29a3e2bfc92d3d8ced  apps/integration-api/src/automation/mock-adapter.ts
+e07c10cd532e2fc8724edaa319bb10d76cc2a0d44883acbc28c9fcf5f95223b9  apps/integration-api/src/automation/types.ts
+a933a468e30056c222a5c4a725817b93be2a46d3dcc67c6d405907f597e60b79  docs/contracts/n8n/N8N-1.1/README.md
+f382a0bae7a8fa99ebd67977454ea8c2c8b455e7342c6acac76e59083cda5cc0  docs/contracts/n8n/N8N-1.1/WORKFLOW.md
+2edfd70bb91718a721c1702634c2e506d870599cca7be168797c10051470f9c9  docs/contracts/n8n/N8N-1.1/CONTRACT-MAPPING.md
+2e7c93a51f726265abf60ee60aa012a0de6a6f48a76d260fcc94d952792e453b  docs/contracts/n8n/N8N-1.1/SECURITY-BOUNDARY.md
+c2a5cdc563bd8925b0118827edafe78e28fba8d63b5604134d6c0cd01bedb65c  docs/contracts/n8n/N8N-1.1/TEST-EVIDENCE.md
+cb1d8b614403657fd8c077cb9f043abb97de3f50ac1ad7ecffb2ba38aba2b931  docs/contracts/n8n/N8N-1.1/LIMITATIONS.md
+5cf94c007601da5d214f6d726b30558d8b173c2b451525f515fed1202ad43e0e  docs/contracts/n8n/N8N-1.1/NEXT-GATE.md
