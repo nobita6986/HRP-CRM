@@ -1,0 +1,145 @@
+{
+  "name": "n8n-1.1-sla-reminder-crm-NEGATIVE-FIXTURE",
+  "_purpose": "Negative graph fixture for the local runner. Encodes the C-N11-01 graph violations that T0 caught in the previous candidate. The runner MUST detect these via validateGraphInvariants / validateStructure so they cannot be silently re-introduced.",
+  "_violations": [
+    "C-N11-01 violation A: Build sendSyntheticReminder batches fan-out -> HTTP Send AND Build ack from send (not just Build ack from fallback).",
+    "C-N11-01 violation B: Build ack from send does not converge with Build ack from fallback on the same Build acknowledgement batches input (different input indices but no dedupe guard).",
+    "C-N11-03 violation A: ack envelope uses Date.now() / Math.random() inside its idempotencyKey (the key is non-deterministic across replays).",
+    "C-N11-04 violation A: httpRequest node declares a non-n8n-valid httpNodeCredential field instead of authentication.type.",
+    "C-N11-04 violation B: signerProfile.kind is not BLOCKED_BY_N8N_SIGNER_DECISION."
+  ],
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [{ "field": "minutes", "minutesInterval": 15 }] } },
+      "id": "trigger-tick",
+      "name": "Schedule Trigger (every 15m)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 200]
+    },
+    {
+      "parameters": { "functionCode": "return [{ json: { items: [], triggerLabel: 'TICK_15M' } }];" },
+      "id": "fn-list",
+      "name": "Build envelope (listDueNextActions)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [460, 280]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.HRP_AUTOMATION_GATEWAY_URL}}/v1/automation/dispatch",
+        "jsonBody": "={{$json.envelope}}",
+        "options": { "timeout": 5000 },
+        "httpNodeCredential": { "id": "CRM_AUTOMATION_HMAC", "name": "CRM_AUTOMATION_HMAC" }
+      },
+      "id": "http-list",
+      "name": "POST /v1/automation/dispatch (listDueNextActions)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 280]
+    },
+    {
+      "parameters": { "functionCode": "return [{ json: { groups: [], correlationId: 'x' } }];" },
+      "id": "fn-group",
+      "name": "Filter + Group (snooze, slaBucket)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [900, 280]
+    },
+    {
+      "parameters": {
+        "functionCode": "const g=$input.first().json; const idem='rem-'+Date.now()+'-'+Math.random().toString(36).slice(2,6); return [{ json: { kind:'send', envelope: { schemaVersion:'1', commandId:'cmd-'+idem, commandName:'sendSyntheticReminder', idempotencyKey: idem, correlationId: g.correlationId, organizationId: 'org-x', source:{kind:'HRP_UI',provider:'HRP_UI',connectionId:null}, actor:{kind:'SERVICE',serviceId:'svc-x'}, automationSource:{kind:'N8N_AUTOMATION',workflowId:'wf',workflowRevision:1,n8nExecutionId:'e',workflowLabel:'sla'}, operation:{op:'sendSyntheticReminder',payload:{schemaVersion:'1',nextActionId:'na-x',audienceKind:'OWNER',redactedRecipientId:'u',channel:'DASHBOARD_ONLY',reminderRevisionId:'rev-x'}} }, nextActionId:'na-x', correlationId: g.correlationId } }];"
+      },
+      "id": "fn-send",
+      "name": "Build sendSyntheticReminder batches",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1120, 280]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.HRP_AUTOMATION_GATEWAY_URL}}/v1/automation/dispatch",
+        "jsonBody": "={{$json.envelope}}",
+        "options": { "timeout": 5000 },
+        "httpNodeCredential": { "id": "CRM_AUTOMATION_HMAC", "name": "CRM_AUTOMATION_HMAC" }
+      },
+      "id": "http-send",
+      "name": "POST /v1/automation/dispatch (sendSyntheticReminder)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 280]
+    },
+    {
+      "parameters": {
+        "functionCode": "const idem='ack-'+Date.now().toString(36); return [{ json: { envelope: { schemaVersion:'1', commandId:'cmd-'+idem, commandName:'acknowledgeReminder', idempotencyKey: idem, correlationId: $input.first().json.correlationId, organizationId:'org-x', source:{kind:'HRP_UI',provider:'HRP_UI',connectionId:null}, actor:{kind:'SERVICE',serviceId:'svc-x'}, automationSource:{kind:'N8N_AUTOMATION',workflowId:'wf',workflowRevision:1,n8nExecutionId:'e',workflowLabel:'sla'}, operation:{op:'acknowledgeReminder',payload:{schemaVersion:'1',nextActionId:'na-x',notificationOutcome:'SENT',reminderRevisionId:'rev-x',channel:'DASHBOARD_ONLY'}} } } }];"
+      },
+      "id": "fn-ack-send",
+      "name": "Build ack from send",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1560, 280]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { envelope: { schemaVersion:'1', commandId:'cmd-fb-'+Date.now().toString(36), commandName:'acknowledgeReminder', idempotencyKey: 'ack-skip-'+Date.now().toString(36), correlationId:'NEW-CORR', organizationId:'org-x', source:{kind:'HRP_UI',provider:'HRP_UI',connectionId:null}, actor:{kind:'SERVICE',serviceId:'svc-x'}, automationSource:{kind:'N8N_AUTOMATION',workflowId:'wf',workflowRevision:1,n8nExecutionId:'e',workflowLabel:'sla'}, operation:{op:'acknowledgeReminder',payload:{schemaVersion:'1',nextActionId:'na-fb',notificationOutcome:'SKIPPED',reminderRevisionId:'rev-fb',channel:'DASHBOARD_ONLY'}} } } }];"
+      },
+      "id": "fn-ack-fb",
+      "name": "Build ack from fallback",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1560, 360]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.HRP_AUTOMATION_GATEWAY_URL}}/v1/automation/dispatch",
+        "jsonBody": "={{$json.envelope}}",
+        "options": { "timeout": 5000 },
+        "httpNodeCredential": { "id": "CRM_AUTOMATION_HMAC", "name": "CRM_AUTOMATION_HMAC" }
+      },
+      "id": "http-ack-1",
+      "name": "POST /v1/automation/dispatch (acknowledgeReminder)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1780, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.HRP_AUTOMATION_GATEWAY_URL}}/v1/automation/dispatch",
+        "jsonBody": "={{$json.envelope}}",
+        "options": { "timeout": 5000 },
+        "httpNodeCredential": { "id": "CRM_AUTOMATION_HMAC", "name": "CRM_AUTOMATION_HMAC" }
+      },
+      "id": "http-ack-2",
+      "name": "POST /v1/automation/dispatch (acknowledgeReminder duplicate)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1780, 360]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger (every 15m)": { "main": [[{ "node": "Build envelope (listDueNextActions)", "type": "main", "index": 0 }]] },
+    "Build envelope (listDueNextActions)": { "main": [[{ "node": "POST /v1/automation/dispatch (listDueNextActions)", "type": "main", "index": 0 }]] },
+    "POST /v1/automation/dispatch (listDueNextActions)": { "main": [[{ "node": "Filter + Group (snooze, slaBucket)", "type": "main", "index": 0 }]] },
+    "Filter + Group (snooze, slaBucket)": { "main": [[{ "node": "Build sendSyntheticReminder batches", "type": "main", "index": 0 }]] },
+    "Build sendSyntheticReminder batches": {
+      "main": [
+        [
+          { "node": "POST /v1/automation/dispatch (sendSyntheticReminder)", "type": "main", "index": 0 },
+          { "node": "Build ack from send", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "POST /v1/automation/dispatch (sendSyntheticReminder)": { "main": [[{ "node": "Build ack from send", "type": "main", "index": 0 }]] },
+    "Build ack from send": { "main": [[{ "node": "POST /v1/automation/dispatch (acknowledgeReminder)", "type": "main", "index": 0 }]] },
+    "Build ack from fallback": { "main": [[{ "node": "POST /v1/automation/dispatch (acknowledgeReminder duplicate)", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "id": "n8n-sla-reminder-negative",
+  "signerProfile": { "kind": "ALLOWED", "approvedLegacyAlgorithm": "sha256(input || secret)" },
+  "tags": []
+}

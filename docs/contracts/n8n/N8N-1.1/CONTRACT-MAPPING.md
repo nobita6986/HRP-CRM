@@ -22,7 +22,7 @@ operations added for N8N/1.1.
 | Response data   | `{ schemaVersion, nextActionId, audienceKind, redactedRecipientId, channel, sentAt, envelope }` |
 | Channel         | `DASHBOARD_ONLY` (no real email/SMS/Zalo/Chatwoot)                   |
 | Audience        | `OWNER` or `SUPERVISOR` — only redacted recipient ids ever leave the workflow |
-| Idempotency key | `rem-<day>-<organizationId>-<audience>-<recipient>-<slaBucket>` so 15-min tick + daily digest converge |
+| Idempotency key | `rem-<dayKey>-<nextActionId>-<audience>-r<rev>` so 15-min tick + daily digest converge and one envelope is sent per `nextActionId` |
 
 ## acknowledgeReminder
 
@@ -32,7 +32,7 @@ operations added for N8N/1.1.
 | Payload         | `{ schemaVersion, nextActionId, notificationOutcome, reminderRevisionId, channel }` |
 | Outcome enum    | `SENT` / `FAILED` / `SKIPPED` (no other values on the wire)         |
 | Response data   | `{ schemaVersion, nextActionId, reminderRevisionId, recordedAt, envelope }` |
-| Idempotency key | `ack-<reminderIdempotencyKey>` (per reminder)                        |
+| Idempotency key | `ack-<dayKey>-<nextActionId>-<audience>-r<rev>` (per logical reminder, deterministic across runs and replays) |
 
 ## Frozen boundary fields used
 

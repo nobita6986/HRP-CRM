@@ -27,6 +27,9 @@
 
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync as _readFileSync } from 'node:fs';
+import { resolve as _resolve, dirname as _dirname } from 'node:path';
+import { fileURLToPath as _fileURLToPath } from 'node:url';
 import { startServer } from '../dist/server.js';
 import {
   AutomationServiceRegistry,
@@ -40,6 +43,7 @@ import { SCHEMA_VERSION } from '@hrp-engagement/contracts';
 import {
   runWorkflowOnce,
   validateStructure,
+  validateGraphInvariants,
 } from '../../n8n-workflows/local-runner.mjs';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
@@ -865,11 +869,17 @@ describe('AC #14 — partial batch (one fails, others succeed)', () => {
     const sendCalls = result.trace.filter(
       (t) => t.kind === 'http' && t.commandName === 'sendSyntheticReminder',
     );
-    assert.ok(sendCalls.length >= 1, 'expected at least one sendSyntheticReminder');
-    /* All calls succeeded because the mock adapter is healthy in this suite. */
+    /* Two items, both ACTIVE, both with a supervisor. Both triggers fire,
+       so the simulator sends 2*2=4 envelopes. The gateway deduplicates by
+       idempotency key, so the adapter records exactly N unique items. */
+    assert.equal(sendCalls.length, 4, 'two triggers x two items = four envelopes');
+    /* All APPLIED after idempotency cache hit. */
     for (const c of sendCalls) assert.equal(c.status, 200);
+    /* Adapter log = unique nextActionIds (2 here). */
     const log = adapter.readReminderLog();
-    assert.equal(log.length, sendCalls.length);
+    const ids = new Set(log.map((l) => l.nextActionId));
+    assert.equal(ids.size, 2, 'two unique nextActionIds in reminder log');
+    assert.equal(log.length, ids.size);
   });
 });
 
@@ -946,5 +956,441 @@ describe('canonical state is read-only from workflow perspective', () => {
     assert.equal(data.status, undefined);
     assert.equal(data.sla, undefined);
     assert.equal(data.snoozeMode, undefined);
+  });
+});
+
+/* ============================================================
+ * C-N11-02 — multi-item / replay / new-item / reorder
+ * ============================================================ */
+
+describe('C-N11-02 — multi-item: N items in one owner group produce N distinct reminders', () => {
+  let server; let url; let adapter;
+  before(async () => {
+    const items = [
+      fixtureItem('na-multi-1', {
+        assignedToRedacted: 'user-owner-multi',
+        dueAt: new Date(FIXED_NOW + 10 * 60 * 1000).toISOString(),
+      }),
+      fixtureItem('na-multi-2', {
+        assignedToRedacted: 'user-owner-multi',
+        dueAt: new Date(FIXED_NOW + 20 * 60 * 1000).toISOString(),
+      }),
+      fixtureItem('na-multi-3', {
+        assignedToRedacted: 'user-owner-multi',
+        dueAt: new Date(FIXED_NOW + 30 * 60 * 1000).toISOString(),
+      }),
+    ];
+    const h = buildHandler({ initialListDue: { items } });
+    adapter = h.adapter;
+    const r = await bootServer(h.handler);
+    server = r.server; url = r.url;
+  });
+  after(async () => { await new Promise((res) => server.close(res)); });
+
+  test('three distinct reminders with distinct stable idempotency keys', async () => {
+    const result = await runSim({ url });
+    const sends = result.trace.filter(
+      (t) => t.kind === 'http' && t.commandName === 'sendSyntheticReminder',
+    );
+    /* Two triggers x three items = six send envelopes (but the gateway
+       dedupes by idempotency key, so the adapter records three). */
+    const sendKeys = new Set();
+    for (const s of sends) sendKeys.add(s.idempotencyKey);
+    assert.equal(sendKeys.size, 3, 'three distinct idempotency keys across triggers');
+    /* All keys match the stable (day, nextActionId, audience, revision) shape. */
+    for (const k of sendKeys) {
+      assert.match(k, /^rem-\d{8}-na-multi-[123]-OWNER-r\d+$/);
+    }
+    /* Adapter log records exactly N unique reminders. */
+    const log = adapter.readReminderLog();
+    assert.equal(log.length, 3);
+    const loggedIds = new Set(log.map((l) => l.nextActionId));
+    assert.deepEqual([...loggedIds].sort(), ['na-multi-1', 'na-multi-2', 'na-multi-3'].sort());
+  });
+});
+
+describe('C-N11-02 — replay: same logical reminder -> no duplicate recorded', () => {
+  test('runner trace records the duplicate but adapter does NOT record twice', async () => {
+    const items = [
+      fixtureItem('na-replay-X', {
+        assignedToRedacted: 'user-owner-rep',
+        dueAt: new Date(FIXED_NOW + 15 * 60 * 1000).toISOString(),
+      }),
+    ];
+    const h = buildHandler({ initialListDue: { items } });
+    const r = await bootServer(h.handler);
+    try {
+      const result = await runSim({ url: r.url });
+      const sendCalls = result.trace.filter(
+        (t) => t.kind === 'http' && t.commandName === 'sendSyntheticReminder',
+      );
+      /* Two triggers => two envelopes with the same idempotency key. */
+      assert.equal(sendCalls.length, 2);
+      /* Both share the same idempotency key. */
+      assert.equal(sendCalls[0].idempotencyKey, sendCalls[1].idempotencyKey);
+      /* Adapter log: ONE entry (gateway dedupe). */
+      const log = h.adapter.readReminderLog();
+      assert.equal(log.length, 1);
+    } finally {
+      await new Promise((res) => r.server.close(res));
+    }
+  });
+});
+
+describe('C-N11-02 — new-item: adding one item after the first run creates exactly one new reminder', () => {
+  test('replay with one additional item yields exactly one new reminder log entry', async () => {
+    /* First run: one item. */
+    const itemA = fixtureItem('na-new-A', {
+      assignedToRedacted: 'user-owner-new',
+      dueAt: new Date(FIXED_NOW + 15 * 60 * 1000).toISOString(),
+    });
+    const h = buildHandler({ initialListDue: { items: [itemA] } });
+    const r = await bootServer(h.handler);
+    try {
+      const r1 = await runSim({ url: r.url });
+      const log1 = h.adapter.readReminderLog();
+      assert.equal(log1.length, 1);
+      assert.equal(log1[0].nextActionId, 'na-new-A');
+      /* Now seed an additional item. */
+      const itemB = fixtureItem('na-new-B', {
+        assignedToRedacted: 'user-owner-new',
+        dueAt: new Date(FIXED_NOW + 16 * 60 * 1000).toISOString(),
+      });
+      h.adapter.seedListDue({ items: [itemA, itemB] });
+      const r2 = await runSim({ url: r.url, triggerLabel: 'DAILY_DIGEST' });
+      /* Same items in second run, plus the new B item. Gateway dedupes
+         A but records B. The runner trace shows one NEW envelope for B
+           (the second trigger fires only on DAILY_DIGEST here, but the
+            daily trigger is added by runSim internally? No — runSim
+            only fires one trigger label. So with DAILY_DIGEST, the
+            15-min trigger is NOT fired again. Good.) */
+      void r1; void r2;
+      const log2 = h.adapter.readReminderLog();
+      assert.equal(log2.length, 2, 'A is dedup-cached, B is new');
+      const ids = log2.map((l) => l.nextActionId).sort();
+      assert.deepEqual(ids, ['na-new-A', 'na-new-B']);
+    } finally {
+      await new Promise((res) => r.server.close(res));
+    }
+  });
+});
+
+describe('C-N11-02 — reorder: same items in different order yield same keys', () => {
+  test('idempotency keys are stable regardless of input order', async () => {
+    const itemsFwd = [
+      fixtureItem('na-ord-1', {
+        assignedToRedacted: 'user-owner-ord',
+        dueAt: new Date(FIXED_NOW + 30 * 60 * 1000).toISOString(),
+      }),
+      fixtureItem('na-ord-2', {
+        assignedToRedacted: 'user-owner-ord',
+        dueAt: new Date(FIXED_NOW + 10 * 60 * 1000).toISOString(),
+      }),
+      fixtureItem('na-ord-3', {
+        assignedToRedacted: 'user-owner-ord',
+        dueAt: new Date(FIXED_NOW + 20 * 60 * 1000).toISOString(),
+      }),
+    ];
+    const itemsRev = [itemsFwd[2], itemsFwd[0], itemsFwd[1]];
+    const h1 = buildHandler({ initialListDue: { items: itemsFwd } });
+    const r1 = await bootServer(h1.handler);
+    let keysFwd;
+    try {
+      const result = await runSim({ url: r1.url, triggerLabel: 'TICK_15M' });
+      keysFwd = result.trace
+        .filter((t) => t.kind === 'http' && t.commandName === 'sendSyntheticReminder')
+        .map((t) => t.idempotencyKey);
+      /* Two triggers fire -> up to 6 envelopes, but the stable upstream
+         sort means the unique key set is identical regardless of input
+         order. */
+      assert.ok(keysFwd.length >= 3, 'at least three envelopes');
+    } finally { await new Promise((res) => r1.server.close(res)); }
+
+    const h2 = buildHandler({ initialListDue: { items: itemsRev } });
+    const r2 = await bootServer(h2.handler);
+    let keysRev;
+    try {
+      const result = await runSim({ url: r2.url, triggerLabel: 'TICK_15M' });
+      keysRev = result.trace
+        .filter((t) => t.kind === 'http' && t.commandName === 'sendSyntheticReminder')
+        .map((t) => t.idempotencyKey);
+      assert.ok(keysRev.length >= 3, 'at least three envelopes');
+    } finally { await new Promise((res) => r2.server.close(res)); }
+
+    /* The keys are sorted by (dueAt, nextActionId) upstream, so both
+       forward and reverse fixtures produce the SAME ordered set of
+       unique keys. */
+    const uniqFwd = new Set(keysFwd);
+    const uniqRev = new Set(keysRev);
+    assert.equal(uniqFwd.size, 3, 'three unique keys in forward order');
+    assert.equal(uniqRev.size, 3, 'three unique keys in reverse order');
+    assert.deepEqual([...uniqFwd].sort(), [...uniqRev].sort());
+  });
+});
+
+/* ============================================================
+ * C-N11-03 — deterministic ack keys
+ * ============================================================ */
+
+describe('C-N11-03 — ack idempotencyKey is deterministic per logical item', () => {
+  test('same nextActionId + same day + same audience -> same ackBase across runs', async () => {
+    const item = fixtureItem('na-det-ack-1', {
+      assignedToRedacted: 'user-det-ack',
+      dueAt: new Date(FIXED_NOW + 15 * 60 * 1000).toISOString(),
+    });
+    const h1 = buildHandler({ initialListDue: { items: [item] } });
+    const r1 = await bootServer(h1.handler);
+    let ackKeysA;
+    try {
+      const result = await runSim({ url: r1.url, triggerLabel: 'TICK_15M' });
+      ackKeysA = result.trace
+        .filter((t) => t.kind === 'http' && t.commandName === 'acknowledgeReminder')
+        .map((t) => t.idempotencyKey);
+    } finally { await new Promise((res) => r1.server.close(res)); }
+
+    const h2 = buildHandler({ initialListDue: { items: [item] } });
+    const r2 = await bootServer(h2.handler);
+    let ackKeysB;
+    try {
+      const result = await runSim({ url: r2.url, triggerLabel: 'TICK_15M' });
+      ackKeysB = result.trace
+        .filter((t) => t.kind === 'http' && t.commandName === 'acknowledgeReminder')
+        .map((t) => t.idempotencyKey);
+    } finally { await new Promise((res) => r2.server.close(res)); }
+
+    assert.deepEqual(ackKeysA.sort(), ackKeysB.sort());
+    /* Ack keys derived from stable fields. */
+    for (const k of ackKeysA) {
+      assert.match(k, /^ack-\d{8}-na-det-ack-1-OWNER-r\d+$/);
+    }
+  });
+
+  test('fallback ack key contains nextActionId and is deterministic', async () => {
+    const item = fixtureItem('na-det-fb-1', {
+      assignedToRedacted: 'NONE',
+      dueAt: new Date(FIXED_NOW - 10 * 60 * 1000).toISOString(),
+    });
+    item.supervisorRedacted = 'NONE';
+    const h = buildHandler({ initialListDue: { items: [item] } });
+    const r = await bootServer(h.handler);
+    try {
+      const result = await runSim({ url: r.url, triggerLabel: 'TICK_15M' });
+      const ackCalls = result.trace.filter(
+        (t) => t.kind === 'http' && t.commandName === 'acknowledgeReminder',
+      );
+      /* Two triggers fire and produce the same logical fallback reminder,
+         so the gateway dedupes. Two envelopes sent, but both share the
+         same idempotency key. */
+      assert.equal(ackCalls.length, 2, 'two triggers x one fallback ack');
+      assert.equal(ackCalls[0].idempotencyKey, ackCalls[1].idempotencyKey);
+      assert.match(ackCalls[0].idempotencyKey, /^ack-\d{8}-na-det-fb-1-OWNER-r\d+$/);
+    } finally { await new Promise((res) => r.server.close(res)); }
+  });
+});
+
+/* ============================================================
+ * C-N11-04 — BLOCKED_BY_N8N_SIGNER_DECISION
+ * ============================================================ */
+
+describe('C-N11-04 — workflow JSON declares BLOCKED_BY_N8N_SIGNER_DECISION', () => {
+  test('workflow top-level signerProfile.kind === BLOCKED_BY_N8N_SIGNER_DECISION', () => {
+    assert.equal(WORKFLOW.signerProfile.kind, 'BLOCKED_BY_N8N_SIGNER_DECISION');
+  });
+  test('no httpRequest node declares httpNodeCredential (replaced by authentication block)', () => {
+    for (const n of WORKFLOW.nodes) {
+      if (n.type !== 'n8n-nodes-base.httpRequest') continue;
+      assert.equal(n.parameters.httpNodeCredential, undefined,
+        `node ${n.name} must not declare httpNodeCredential`);
+      assert.equal(n.parameters.authentication?.type, 'none',
+        `node ${n.name} must declare authentication.type='none' (no built-in HMAC type)`);
+    }
+  });
+  test('validateStructure rejects a workflow without the BLOCKED marker', () => {
+    const bad = JSON.parse(JSON.stringify(WORKFLOW));
+    bad.signerProfile.kind = 'ALLOWED';
+    const r = validateStructure(bad);
+    assert.equal(r.ok, false);
+    assert.ok(
+      r.errors.some((e) => /BLOCKED_BY_N8N_SIGNER_DECISION/.test(e)),
+      'must report missing BLOCKED marker',
+    );
+  });
+  test('runner trace annotates signerSubstituted when secret is provided', async () => {
+    const items = [fixtureItem('na-sign-1', {
+      assignedToRedacted: 'user-sign',
+      dueAt: new Date(FIXED_NOW + 10 * 60 * 1000).toISOString(),
+    })];
+    const h = buildHandler({ initialListDue: { items } });
+    const r = await bootServer(h.handler);
+    try {
+      const result = await runSim({ url: r.url, triggerLabel: 'TICK_15M' });
+      const sendCalls = result.trace.filter(
+        (t) => t.kind === 'http' && t.commandName === 'sendSyntheticReminder',
+      );
+      assert.ok(sendCalls.length > 0);
+      for (const c of sendCalls) {
+        assert.equal(c.signerSubstituted, true, 'substitution flagged explicitly');
+        assert.equal(c.authenticationType, 'none', 'workflow still declares type=none');
+      }
+      assert.equal(result.signerProfile.kind, 'BLOCKED_BY_N8N_SIGNER_DECISION');
+    } finally { await new Promise((res) => r.server.close(res)); }
+  });
+  test('runner with disableSignerSubstitution=true sends unsigned; gateway rejects', async () => {
+    const items = [fixtureItem('na-sign-blocked-1', {
+      assignedToRedacted: 'user-sign-blocked',
+      dueAt: new Date(FIXED_NOW + 10 * 60 * 1000).toISOString(),
+    })];
+    const h = buildHandler({ initialListDue: { items } });
+    const r = await bootServer(h.handler);
+    try {
+      const result = await runWorkflowOnce({
+        workflow: WORKFLOW,
+        gatewayBaseUrl: r.url,
+        env: { HRP_AUTOMATION_GATEWAY_URL: r.url, HRP_AUTOMATION_SERVICE_ID: SERVICE_ID, HRP_AUTOMATION_ORG_ID: ORG_A, N8N_TRIGGER_LABEL: 'TICK_15M', N8N_WORKFLOW_REVISION: '2' },
+        secret: SECRET,
+        serviceId: SERVICE_ID,
+        organizationId: ORG_A,
+        connectionId: CONN_A,
+        workflowId: 'wf-sla-reminder',
+        workflowRevision: 2,
+        n8nExecutionId: 'exec-blocked-1',
+        triggerLabel: 'TICK_15M',
+        disableSignerSubstitution: true,
+      });
+      const listCall = result.trace.find((t) => t.kind === 'http' && t.commandName === 'listDueNextActions');
+      assert.ok(listCall);
+      /* Without signature substitution the gateway MUST reject. */
+      assert.equal(listCall.signerSubstituted, false);
+      /* The gateway returns 401 AUTHENTICATION_REQUIRED for unsigned envelopes. */
+      assert.ok(listCall.status === 401 || listCall.status === 503, 'unsigned request must be rejected');
+    } finally { await new Promise((res) => r.server.close(res)); }
+  });
+});
+
+/* ============================================================
+ * C-N11-05 — graph invariants + negative fixture
+ * ============================================================ */
+
+describe('C-N11-05 — negative fixture (the old candidate\'s bugs)', () => {
+  let negative;
+  before(() => {
+    const here = _fileURLToPath(import.meta.url);
+    const path_ = _resolve(_dirname(here), '../../n8n-workflows/sla-reminder.negative.v1.json');
+    negative = JSON.parse(_readFileSync(path_, 'utf8'));
+  });
+
+  test('negative fixture fails structure validation (BLOCKED marker missing)', () => {
+    const r = validateStructure(negative);
+    assert.equal(r.ok, false);
+    assert.ok(r.errors.some((e) => /BLOCKED_BY_N8N_SIGNER_DECISION/.test(e)));
+  });
+  test('negative fixture fails graph validation: httpNodeCredential + fan-out + non-deterministic keys', () => {
+    const r = validateGraphInvariants(negative);
+    assert.equal(r.ok, false);
+    const joined = r.errors.join('\n');
+    assert.ok(/httpNodeCredential/.test(joined), 'httpNodeCredential must be detected');
+    assert.ok(/C-N11-01 violation/.test(joined), 'fan-out violation must be detected');
+    assert.ok(/C-N11-03 violation/.test(joined), 'Date.now/Math.random must be detected');
+  });
+});
+
+describe('C-N11-05 — duplicate detection in runner trace', () => {
+  test('simulator flags duplicate send when the same logical reminder appears twice', async () => {
+    /* Build a workflow fragment that explicitly fans out the same send
+       item into two HTTP Send nodes. */
+    const dupWorkflow = {
+      name: 'dup-fixture',
+      nodes: [
+        {
+          parameters: { rule: { interval: [{ field: 'minutes', minutesInterval: 15 }] } },
+          id: 't',
+          name: 'Tick',
+          type: 'n8n-nodes-base.scheduleTrigger',
+          typeVersion: 1.2,
+          position: [0, 0],
+        },
+        {
+          parameters: {
+            functionCode:
+              "return [{ json: { envelope: { " +
+              "schemaVersion:'1', commandId:'cmd-dup-1', commandName:'sendSyntheticReminder', " +
+              "idempotencyKey: 'idem-dup-A', correlationId:'corr-dup-A', organizationId:'org-x', " +
+              "source:{kind:'HRP_UI',provider:'HRP_UI',connectionId:null}, " +
+              "actor:{kind:'SERVICE',serviceId:'svc-x'}, " +
+              "automationSource:{kind:'N8N_AUTOMATION',workflowId:'wf',workflowRevision:1,n8nExecutionId:'e',workflowLabel:'sla'}, " +
+              "operation:{op:'sendSyntheticReminder',payload:{schemaVersion:'1',nextActionId:'na-dup',audienceKind:'OWNER',redactedRecipientId:'u',channel:'DASHBOARD_ONLY',reminderRevisionId:'rev-dup'}} " +
+              "} } }];",
+          },
+          id: 'b',
+          name: 'Build',
+          type: 'n8n-nodes-base.function',
+          typeVersion: 1,
+          position: [100, 0],
+        },
+        {
+          parameters: {
+            method: 'POST',
+            url: '={{$env.HRP_AUTOMATION_GATEWAY_URL}}/v1/automation/dispatch',
+            jsonBody: '={{$json.envelope}}',
+            options: { timeout: 5000 },
+            authentication: { type: 'none' },
+          },
+          id: 'h1',
+          name: 'HTTP Send A',
+          type: 'n8n-nodes-base.httpRequest',
+          typeVersion: 4.2,
+          position: [200, -50],
+        },
+        {
+          parameters: {
+            method: 'POST',
+            url: '={{$env.HRP_AUTOMATION_GATEWAY_URL}}/v1/automation/dispatch',
+            jsonBody: '={{$json.envelope}}',
+            options: { timeout: 5000 },
+            authentication: { type: 'none' },
+          },
+          id: 'h2',
+          name: 'HTTP Send B',
+          type: 'n8n-nodes-base.httpRequest',
+          typeVersion: 4.2,
+          position: [200, 50],
+        },
+      ],
+      connections: {
+        Tick: { main: [[{ node: 'Build', type: 'main', index: 0 }]] },
+        Build: { main: [[{ node: 'HTTP Send A', type: 'main', index: 0 }, { node: 'HTTP Send B', type: 'main', index: 0 }]] },
+      },
+      active: false,
+      settings: { executionOrder: 'v1' },
+      id: 'dup-fixture',
+      signerProfile: { kind: 'BLOCKED_BY_N8N_SIGNER_DECISION' },
+      tags: [],
+    };
+    const h = buildHandler({});
+    const r = await bootServer(h.handler);
+    try {
+      const result = await runWorkflowOnce({
+        workflow: dupWorkflow,
+        gatewayBaseUrl: r.url,
+        env: { HRP_AUTOMATION_GATEWAY_URL: r.url, HRP_AUTOMATION_SERVICE_ID: SERVICE_ID, HRP_AUTOMATION_ORG_ID: ORG_A, N8N_TRIGGER_LABEL: 'TICK_15M' },
+        secret: SECRET,
+        serviceId: SERVICE_ID,
+        organizationId: ORG_A,
+        connectionId: CONN_A,
+        workflowId: 'wf-dup',
+        workflowRevision: 1,
+        n8nExecutionId: 'exec-dup',
+        triggerLabel: 'TICK_15M',
+      });
+      const sendCalls = result.trace.filter(
+        (t) => t.kind === 'http' && t.commandName === 'sendSyntheticReminder',
+      );
+      assert.equal(sendCalls.length, 2, 'two HTTP Send nodes each fire one envelope');
+      /* Exactly one is the duplicate. */
+      assert.equal(result.duplicates.send.length, 1);
+      assert.equal(result.duplicates.send[0], 'idem-dup-A');
+      const flagged = sendCalls.filter((c) => c.duplicate);
+      assert.equal(flagged.length, 1, 'exactly one trace entry is flagged as duplicate');
+    } finally { await new Promise((res) => r.server.close(res)); }
   });
 });

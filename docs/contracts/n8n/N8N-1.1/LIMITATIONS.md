@@ -30,13 +30,17 @@ It only records synthetic-reminder deliveries to an in-process array.
 ### 3. The frozen gateway has known quirks we mirror
 
 - `hmacSha256Hex(input, secret)` in `digest.ts` is plain
-  `sha256(input || secret)`, NOT real HMAC.
+  `sha256(input || secret)`, an **accepted legacy signature profile
+  carried forward from N8N/0.3**, NOT cryptographic HMAC.
 - `payloadDigestHex` double-canonicalises the JSON.
 
-The local runner mirrors these quirks so the simulator signs
-correctly without modifying frozen baseline code. **This means the
-local-runner signature is NOT real HMAC.** Real production signing
-must be done by the n8n HMAC credential helper.
+Until C-N11-04 is unblocked, the runner signs HTTP envelopes ONLY when
+the caller passes a `secret` argument; trace entries are tagged with
+`signerSubstituted: true` so the substitution is explicit. The
+committed workflow JSON itself remains `BLOCKED_BY_N8N_SIGNER_DECISION`
+because stock n8n `httpRequest` v4.2 has no built-in HMAC credential
+type. Real production signing must be done by the n8n signer node or
+custom credential mechanism T0 chooses.
 
 ### 4. The supervisor map is a workflow-environment fixture
 

@@ -37,9 +37,44 @@
    reminder log is in-memory only. No file writes, no DB writes, no
    external storage.
 
-10. **Embed a real secret in the workflow JSON.** The HMAC credential
-    helper is referenced by ID only; no secret value is ever written
-    to the workflow, fixtures, or evidence files.
+10. **Embed a real secret in the workflow JSON.** The credential helper
+    is referenced by ID only; no secret value is ever written to the
+    workflow, fixtures, or evidence files.
+
+## Signature profile (C-N11-04)
+
+The N8N/0.3 signature profile is `sha256(input || secret)` (a plain
+double-canonical SHA-256 digest of two concatenated buffers), **not**
+a cryptographic HMAC. Do not document or configure it as "real HMAC".
+
+The workflow JSON declares `signerProfile.kind =
+'BLOCKED_BY_N8N_SIGNER_DECISION'` because n8n `httpRequest` v4.2 has
+no built-in HMAC credential type. The only n8n-valid
+`authentication.type` values are `none`, `genericCredentialType`,
+`httpHeaderAuth`, `httpQueryAuth`, `httpBasicAuth`, `oAuth1Api`, and
+`oAuth2Api`; none of these produce the N8N/0.3 signature profile.
+
+### Unblock criteria
+
+The workflow is unblocked when the operator either:
+
+(a) installs a custom n8n node that signs each HTTP request using the
+    legacy SHA-256(input || secret) profile and updates the workflow
+    JSON to reference it (instead of `authentication.type = 'none'`);
+    OR
+
+(b) provides a custom credential type bound to the same algorithm and
+    configures each `httpRequest` node to use it.
+
+Until then:
+
+- The runner refuses to inject an HMAC. It signs HTTP envelopes ONLY
+  when the caller passes a `secret` argument, and tags the trace
+  entry with `signerSubstituted: true` so the substitution is
+  explicit.
+- The committed workflow JSON carries `signerProfile.kind =
+  'BLOCKED_BY_N8N_SIGNER_DECISION'` and `validateStructure` rejects any
+  candidate whose signerProfile.kind is anything else.
 
 ## Snooze semantics
 
@@ -67,11 +102,14 @@ proves:
 
 ## Run signature handling
 
-The local runner signs envelopes with the same broken-gateway
-plain-SHA scheme used by the frozen `digest.ts` (NOT real HMAC). This
-is intentional — it makes the local simulator and the frozen gateway
-agree without modifying frozen baseline code. Real HMAC signing is the
-credential helper's job at runtime.
+The local runner signs envelopes with the legacy plain-SHA scheme used
+by the frozen `digest.ts` (sha256(input || secret), NOT cryptographic
+HMAC). This is intentional — it makes the local simulator and the
+frozen gateway agree without modifying frozen baseline code.
 
-In production, the HMAC credential helper injects the real
-`X-Hrp-Automation-Signature`. The workflow JSON carries no secret.
+In production, a custom signer node or custom credential type injects
+`X-Hrp-Automation-Signature` declaratively via the n8n workflow JSON.
+The runner does NOT add a signature to outgoing requests when the
+workflow declares `authentication.type = 'none'`. The committed
+workflow JSON carries the BLOCKED_BY_N8N_SIGNER_DECISION marker so
+this state cannot be silently re-introduced.

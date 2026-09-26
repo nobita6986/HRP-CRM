@@ -52,8 +52,12 @@ T0 has the authority to:
 - Snooze affects notification only; SLA / canonical state are not
   modified.
 - Logs are redacted: no secret, signature, raw body, or raw PII.
-- All dispatches use the N8N/0.3 frozen HTTP boundary with HMAC, scope,
-  idempotency, and kill switch.
+- All dispatches use the N8N/0.3 frozen HTTP boundary with the
+  **accepted legacy signature profile** (legacy SHA-256(input || secret),
+  not cryptographic HMAC), scope, idempotency, and kill switch. See
+  SECURITY-BOUNDARY.md for the BLOCKED_BY_N8N_SIGNER_DECISION status
+  until the operator wires a signer node / custom credential type
+  (n8n `httpRequest` v4.2 has no built-in HMAC credential).
 
 ## Bundle map
 
