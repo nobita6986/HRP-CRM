@@ -1,11 +1,13 @@
 # N8N/1.1-SIGNER manifest -- raw SHA-256 over committed blobs
 # Format: each blob's `<sha256>  <repo-relative-path>`.
 # Round: N8N/1.1-SIGNER (READ_ONLY signer package + inactive import candidate).
+# Status: PROTOTYPE_NOT_N8N_RUNTIME_ACCEPTED (see HANDOFF.md role-change banner).
 
 f8159f10bf0577202eebf637bcd0446d684a632220ce0dd1580145a6b7861953  docs/contracts/n8n/N8N-1.1-SIGNER/CONTRACT.md
-4dd96dce963c70fed7e498867d6181d2c412d9d95d88814d6a3b0dbbe7c5e9d0  docs/contracts/n8n/N8N-1.1-SIGNER/HANDOFF.md
-6de2168fc726eddb02b03f1a5a454e5ad624a8bd5ddb787dbaa2ecdcde351493  docs/contracts/n8n/N8N-1.1-SIGNER/NEXT-GATE.md
-eb3e8c44fc1dec0bc3c39b4684d448e06ed5de5b5decc295ce7cbccdc06e69fe  docs/contracts/n8n/N8N-1.1-SIGNER/README.md
+32382cd90e2898dfb6a029ca74fc61ad0eab8abd687b14a9d1306bb686a0a338  docs/contracts/n8n/N8N-1.1-SIGNER/HANDOFF.md
+4209581dba677a1345253857265652932051e5428a120973bab4deeee1306ab8  docs/contracts/n8n/N8N-1.1-SIGNER/NEXT-GATE.md
+0780d524c203fbf5d238757ffbe38b9c6a4e1233be0e16542925b9c857507fd2  docs/contracts/n8n/N8N-1.1-SIGNER/QA-REVIEW-QUEUE.md
+bfa4a1604d27b8ba936315c824d3dbadfeb5fd6412aba781885c5b5a0b99752a  docs/contracts/n8n/N8N-1.1-SIGNER/README.md
 7019de1367082e15305e0f7faa2753191d330b5665cbd409b7ff66066d6b12e0  docs/contracts/n8n/N8N-1.1-SIGNER/TESTS.md
 af63671721b521c7727669b6f1110f42dcb45c95716d662829ad8b2b3c54037f  docs/contracts/n8n/N8N-1.1-SIGNER/THREAT-BOUNDARY.md
 510787786c34913645e3b99e6c61fb8556ef45aa03fff060046f70fc688c025d  tools/n8n-nodes-hrp-signer/package.json

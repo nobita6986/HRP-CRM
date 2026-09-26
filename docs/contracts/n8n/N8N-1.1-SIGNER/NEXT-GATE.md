@@ -2,10 +2,20 @@
 
 ## Status
 
-READY_FOR_T0_N8N_11_SIGNER_LOCAL_REVIEW (held at T1-A boundary).
-No automated promotion beyond this gate.
+PROTOTYPE_NOT_N8N_RUNTIME_ACCEPTED (T1-A role change 2026-09-26
+23:48 UTC+7).
 
-## What T0 must approve
+The N8N/1.1-SIGNER prototype code remains in the branch as a
+**reference implementation** of what the n8n AI Assistant should
+produce when T0 re-opens the custom-node authoring task. T1-A does
+NOT promote it; promotion must come through T0 -> n8n AI Assistant
+on n8n-crm, and T1-A's role from here on is **workflow QA /
+conformance review** of the resulting export.
+
+See `QA-REVIEW-QUEUE.md` in this directory for the intake procedure
+T0 uses to deliver a workflow export + execution evidence to T1-A.
+
+## What T0 must approve (prototype only -- not promotion)
 
 1. Algorithm honesty. The signer is named
    `LEGACY_SHA256_INPUT_SECRET` and labelled as

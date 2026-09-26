@@ -4,6 +4,24 @@
 
 READY_FOR_T0_N8N_11_SIGNER_LOCAL_REVIEW
 
+**T1-A ROLE UPDATE (effective 2026-09-26 23:48 UTC+7):**
+this round's deliverables are now classified
+**PROTOTYPE_NOT_N8N_RUNTIME_ACCEPTED**. T1-A is no longer the
+authoring party for n8n workflow JSON -- that ownership moves to
+the n8n AI Assistant on n8n-crm, with T0 as the routing party.
+T1-A's role from this point on is **n8n workflow QA / conformance**
+review of exports that T0 forwards.
+
+This classification does NOT invalidate the prototype: it stays in
+the branch as a reference implementation for what the AI Assistant
+should eventually emit. Commits `1e25f98`, `5e02aa8`, and `5418378`
+are kept immutable -- no amend, no delete, no force-push. The
+handoff status below is retained for the historical record but the
+next T0 handoff for N8N/1.1 will be of a different shape (an
+exported workflow JSON + execution evidence + correction prompt,
+not a code-only prototype). See `QA-REVIEW-QUEUE.md` in this
+directory for the current intake procedure.
+
 ## What changed since N8N/1.1 Round 1
 
 The Round 1 commit 5418378 left a literal NUL byte inside the
