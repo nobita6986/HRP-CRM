@@ -1,0 +1,250 @@
+/**
+ * tests/embed-host-simulator.html — B.03-PREP synthetic embed-host simulator page.
+ *
+ * Served by the panel server at /embed-host-simulator (dev/test only).
+ * The simulator opens the panel in an iframe and posts messages to it.
+ *
+ * The Playwright suite (tests/embed-host-browser-evidence.mjs) drives this
+ * page by evaluating JavaScript inside the browser to set up scenarios and
+ * read back the panel state.
+ *
+ * SYNTHETIC ONLY. No real Chatwoot / HRP runtime.
+ */
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="hrp-embed-simulator" content="true">
+<meta name="hrp-embed-simulator-version" content="1">
+<title>B.03-PREP Embed-Host Simulator</title>
+<style>
+  body { margin: 0; font-family: ui-sans-serif, system-ui, sans-serif; background: #f5f5f5; }
+  #controls { padding: 0.5rem 1rem; background: #fff; border-bottom: 1px solid #ccc; display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+  #controls label { font-size: 0.85rem; color: #555; }
+  #controls select, #controls input { font-size: 0.85rem; padding: 0.25rem; }
+  #controls button { padding: 0.35rem 0.75rem; font-size: 0.85rem; cursor: pointer; }
+  #status { padding: 0.5rem 1rem; background: #fef9c3; border-bottom: 1px solid #facc15; font-size: 0.8rem; }
+  #panel-frame { width: 100%; height: calc(100vh - 110px); border: none; background: #fafafa; }
+  .pill { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 999px; font-size: 0.7rem; background: #fde68a; color: #92400e; margin-left: 0.5rem; }
+</style>
+</head>
+<body>
+<div id="status">
+  <strong>Trạng thái:</strong>
+  <span id="state">Sẵn sàng</span>
+  <span class="pill">MOCK / SYNTHETIC</span>
+  <span class="pill" id="origin-pill">origin: pending</span>
+  <span class="pill" id="session-pill">session: pending</span>
+  <span class="pill" id="correlation-pill">correlation: pending</span>
+</div>
+<div id="controls">
+  <label>Mục tiêu:
+    <select id="target-id">
+      <option value="lp-001">lp-001 (Nguyễn Văn An)</option>
+      <option value="lp-002">lp-002 (Trần Thị Bình)</option>
+      <option value="lp-zzz">lp-zzz (NOT permitted)</option>
+    </select>
+  </label>
+  <button id="btn-send">Gửi yêu cầu hợp lệ</button>
+  <button id="btn-bad-origin">Mô phỏng origin lạ</button>
+  <button id="btn-bad-session">Gửi thiếu sessionRef</button>
+  <button id="btn-oversized">Gửi payload quá lớn</button>
+  <button id="btn-forbidden">Gửi payload có adminToken</button>
+  <button id="btn-target-change">Đổi target (invalidate stale)</button>
+  <button id="btn-revoke">Revoke session</button>
+  <button id="btn-narrow">Panel hẹp (380px)</button>
+  <button id="btn-wide">Panel rộng (720px)</button>
+</div>
+<iframe id="panel-frame" src="/embed-panel/" data-testid="panel-frame"></iframe>
+<script>
+(function () {
+  'use strict';
+  // The panel server exposes the seeded sessionRef via a small JSON endpoint
+  // for tests; the Playwright suite sets this window-level config before any
+  // send happens.
+  const frame = document.getElementById('panel-frame');
+  const stateEl = document.getElementById('state');
+  const originPill = document.getElementById('origin-pill');
+  const sessionPill = document.getElementById('session-pill');
+  const correlationPill = document.getElementById('correlation-pill');
+  const targetSel = document.getElementById('target-id');
+
+  let activeSessionRef = null;
+  let activeCorrelationId = null;
+  let lastSourceWindow = null;
+
+  function setState(text) {
+    stateEl.textContent = text;
+  }
+
+  function setOrigin(text) {
+    originPill.textContent = 'origin: ' + text;
+  }
+  function setSession(text) {
+    sessionPill.textContent = 'session: ' + text;
+  }
+  function setCorrelation(text) {
+    correlationPill.textContent = 'correlation: ' + text;
+  }
+
+  // Capture the iframe contentWindow once it loads.
+  frame.addEventListener('load', () => {
+    lastSourceWindow = frame.contentWindow;
+    setState('Panel iframe loaded; ready to send.');
+  });
+
+  // Listen for inbound messages FROM the panel (telemetry / replies).
+  window.addEventListener('message', (ev) => {
+    if (ev.source !== frame.contentWindow) return;
+    // Reject foreign origins.
+    if (ev.origin !== window.location.origin) {
+      setState('Reject: foreign origin ' + ev.origin);
+      return;
+    }
+    if (ev.data && ev.data.kind === 'hrp/panel-state') {
+      setState('Panel reported state: ' + ev.data.state);
+    }
+  });
+
+  // Build the canonical envelope (helper for buttons).
+  function buildEnvelope(opts) {
+    opts = opts || {};
+    const cid = activeCorrelationId || ('corr-' + Date.now().toString(36));
+    return Object.assign({
+      type: 'talent-context-read/request',
+      version: '1',
+      sentAt: new Date().toISOString(),
+      sessionRef: activeSessionRef || '',
+      correlationId: cid,
+      body: {
+        schemaVersion: '1',
+        correlationId: cid,
+        organizationId: 'org-001',
+        actor: {
+          kind: 'DELEGATED_USER',
+          serviceId: 'svc-crm',
+          userId: 'u-001',
+          delegationRef: buildCanonicalDelegationRef(1234567),
+        },
+        target: { kind: 'TALENT', laborProfileId: targetSel.value },
+        fieldAllowlist: ['identitySummary'],
+      },
+    }, opts);
+  }
+
+  // Minimal canonical base64url-of-32-bytes builder (browser-safe).
+  function buildCanonicalDelegationRef(seed) {
+    const bytes = new Uint8Array(32);
+    let v = seed >>> 0;
+    for (let i = 0; i < 32; i++) {
+      v = (Math.imul(v, 1664525) + 1013904223) >>> 0;
+      bytes[i] = (v >>> 16) & 0xff;
+    }
+    let bin = '';
+    for (let i = 0; i < 32; i++) bin += String.fromCharCode(bytes[i]);
+    const b64 = btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+    return 'dg_' + b64;
+  }
+
+  function postEnvelope(env) {
+    if (!lastSourceWindow) {
+      setState('Panel iframe not loaded yet');
+      return;
+    }
+    // Per B.03 Section 4: NEVER use targetOrigin '*' for data-bearing messages.
+    lastSourceWindow.postMessage(env, window.location.origin);
+    setState('Sent envelope (session=' + (env.sessionRef ? env.sessionRef.slice(0, 6) + '...' : 'MISSING') + ')');
+  }
+
+  document.getElementById('btn-send').addEventListener('click', () => {
+    if (!activeSessionRef) { setState('No active session seeded'); return; }
+    postEnvelope(buildEnvelope());
+  });
+
+  document.getElementById('btn-bad-origin').addEventListener('click', () => {
+    // Simulate parent postMessage from a different origin (we cannot actually
+    // send cross-origin from here, but we can dispatch a fake MessageEvent).
+    setOrigin('http://evil.example');
+    if (!lastSourceWindow) return;
+    const fakeData = buildEnvelope();
+    const ev = new MessageEvent('message', {
+      data: fakeData,
+      origin: 'http://evil.example',
+      source: null,
+    });
+    lastSourceWindow.dispatchEvent(ev);
+    setState('Sent cross-origin simulated event (should be ignored)');
+  });
+
+  document.getElementById('btn-bad-session').addEventListener('click', () => {
+    postEnvelope(buildEnvelope({ sessionRef: '' }));
+  });
+
+  document.getElementById('btn-oversized').addEventListener('click', () => {
+    const big = 'x'.repeat(20 * 1024);
+    postEnvelope(buildEnvelope({ body: Object.assign(buildEnvelope().body, { _pad: big }) }));
+  });
+
+  document.getElementById('btn-forbidden').addEventListener('click', () => {
+    postEnvelope(buildEnvelope({ adminToken: 'leaked' }));
+  });
+
+  document.getElementById('btn-target-change').addEventListener('click', () => {
+    targetSel.value = targetSel.value === 'lp-001' ? 'lp-002' : 'lp-001';
+    setState('Target changed to ' + targetSel.value);
+    postEnvelope(buildEnvelope());
+  });
+
+  document.getElementById('btn-revoke').addEventListener('click', async () => {
+    if (!activeSessionRef) { setState('No session'); return; }
+    try {
+      await fetch('/api/embed/revoke', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionRef: activeSessionRef }),
+      });
+      setSession('REVOKED');
+      setState('Session revoked; subsequent reads should be blocked');
+      postEnvelope(buildEnvelope());
+    } catch (e) {
+      setState('Revoke failed: ' + e.message);
+    }
+  });
+
+  document.getElementById('btn-narrow').addEventListener('click', () => {
+    frame.style.width = '380px';
+    setState('Panel narrowed to 380px');
+  });
+
+  document.getElementById('btn-wide').addEventListener('click', () => {
+    frame.style.width = '100%';
+    setState('Panel restored to full width');
+  });
+
+  // Expose a tiny test API for Playwright.
+  function buildDgRef(seed) {
+    const bytes = new Uint8Array(32);
+    let v = seed >>> 0;
+    for (let i = 0; i < 32; i++) {
+      v = (Math.imul(v, 1664525) + 1013904223) >>> 0;
+      bytes[i] = (v >>> 16) & 0xff;
+    }
+    let bin = '';
+    for (let i = 0; i < 32; i++) bin += String.fromCharCode(bytes[i]);
+    const b64 = btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+    return 'dg_' + b64;
+  }
+  window.__hrpEmbedSim = {
+    setSession(ref) { activeSessionRef = ref; setSession(ref ? ref.slice(0, 6) + '...' : 'none'); },
+    setCorrelation(id) { activeCorrelationId = id; setCorrelation(id.slice(0, 8) + '...'); },
+    setOriginTag(tag) { setOrigin(tag); },
+    sendCanonical() { postEnvelope(buildEnvelope()); },
+    sendRaw(env) { postEnvelope(env); },
+    isPanelLoaded() { return lastSourceWindow !== null; },
+    activeTarget() { return targetSel.value; },
+    dg(seed) { return buildDgRef(seed); },
+  };
+})();
+</script>
+</body>
+</html>

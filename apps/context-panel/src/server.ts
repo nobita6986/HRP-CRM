@@ -36,6 +36,10 @@ import {
   type MockIdentity,
 } from './orchestrator-wire.js';
 
+// CORE/1.B.03-PREP — Embed-host synthetic seam (NOT real Chatwoot / NOT HRP runtime).
+import { handleEmbedTalentContextRead, defaultDeps as defaultEmbedDeps, seedSynthetic } from './embed/server-handler.js';
+import type { EmbedRouteDeps } from './embed/server-handler.js';
+
 // CORE/1.14 — Observability layer (correlation / metrics / scrub / kill-switch)
 import {
   resolveCorrelation,
@@ -107,6 +111,28 @@ function seedFixturesOnce(): void {
   // CORE/1.12 — always seed dashboard fixtures (separate store).
   seedDashboardFixtures();
   seeded = true;
+}
+
+// B.03-PREP: lazily-created embed-host deps (in-process registry).
+let embedDepsSingleton: EmbedRouteDeps | null = null;
+function getEmbedDeps(): EmbedRouteDeps {
+  if (embedDepsSingleton === null) {
+    embedDepsSingleton = defaultEmbedDeps();
+  }
+  return embedDepsSingleton;
+}
+
+// B.03-PREP: read raw body as a string (size-limited) for embed-host routes.
+async function readRawBodyLimited(req: IncomingMessage, maxBytes = 64 * 1024): Promise<string> {
+  const chunks: Buffer[] = [];
+  let total = 0;
+  for await (const chunk of req) {
+    const buf = chunk as Buffer;
+    total += buf.length;
+    if (total > maxBytes) return '';
+    chunks.push(buf);
+  }
+  return Buffer.concat(chunks).toString('utf-8');
 }
 
 const VERSION = '1.0.0-core1.9';
@@ -421,6 +447,48 @@ async function handleRequest(
     }
   }
 
+  // ── B.03-PREP: GET /embed-panel/* → synthetic embed-host React bundle ──
+  if (path.startsWith('/embed-panel/') && req.method === 'GET') {
+    if (config.nodeEnv === 'production') {
+      return respondJson(res, 403, { error: 'forbidden', message: 'Not available in production.' }, ctx);
+    }
+    const sub = path === '/embed-panel/' ? '/index.html' : path.slice('/embed-panel'.length);
+    const filePath = join(process.cwd(), 'dist/embed-ui' + sub);
+    if (existsSync(filePath)) {
+      const content = readFileSync(filePath);
+      res.statusCode = 200;
+      const lower = sub.toLowerCase();
+      res.setHeader('Content-Type',
+        lower.endsWith('.html') ? 'text/html; charset=utf-8' :
+        lower.endsWith('.js') ? 'application/javascript; charset=utf-8' :
+        lower.endsWith('.map') ? 'application/json' :
+        'application/octet-stream');
+      res.end(content);
+    } else {
+      res.statusCode = 404;
+      res.end('Not found');
+    }
+    return;
+  }
+
+  // ── B.03-PREP: GET /embed-host-simulator → synthetic test harness ─────
+  if (path === '/embed-host-simulator' && req.method === 'GET') {
+    if (config.nodeEnv === 'production') {
+      return respondJson(res, 403, { error: 'forbidden', message: 'Not available in production.' }, ctx);
+    }
+    const simPath = join(process.cwd(), 'tests/embed-host-simulator.html');
+    if (existsSync(simPath)) {
+      const content = readFileSync(simPath, 'utf-8');
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.end(content);
+    } else {
+      res.statusCode = 404;
+      res.end('Embed-host simulator not found');
+    }
+    return;
+  }
+
   // ── GET /api/session/reset → [dev only] reset session store ─────────────
   if (path === '/api/session/reset' && req.method === 'GET') {
     if (config.nodeEnv === 'production') {
@@ -430,6 +498,82 @@ async function handleRequest(
     const { serverSession } = await import('./orchestrator-wire.js');
     serverSession.resetGateway();
     return respondJson(res, 200, { reset: 'gateway_ledger', storeState: serverSession.describe() });
+  }
+
+  // ── B.03-PREP: POST /api/embed/talent-context-read → synthetic port ────
+  if (path === '/api/embed/talent-context-read' && req.method === 'POST') {
+    const raw = await readRawBodyLimited(req);
+    await handleEmbedTalentContextRead(req, res, {
+      config: { mockMode: config.mockMode, nodeEnv: config.nodeEnv },
+      deps: getEmbedDeps(),
+      readBody: async () => raw,
+      respondJson: (r, status, body) => respondJson(r, status, body, ctx),
+    });
+    return;
+  }
+
+  // ── B.03-PREP: POST /api/embed/seed → [dev only] seed synthetic session ─
+  if (path === '/api/embed/seed' && req.method === 'POST') {
+    if (config.nodeEnv === 'production') {
+      return respondJson(res, 403, { error: 'forbidden', message: 'Not available in production.' }, ctx);
+    }
+    const raw = await readRawBodyLimited(req);
+    let payload: unknown;
+    try {
+      payload = raw.length === 0 ? {} : JSON.parse(raw);
+    } catch {
+      return respondJson(res, 422, { error: 'VALIDATION_ERROR', message: 'Yêu cầu không hợp lệ.' }, ctx);
+    }
+    const p = payload as {
+      organizationId?: unknown;
+      serviceId?: unknown;
+      hrpUserId?: unknown;
+      allowedLaborProfileIds?: unknown;
+      fixtures?: unknown;
+      seed?: unknown;
+    };
+    if (
+      typeof p.organizationId !== 'string' ||
+      typeof p.serviceId !== 'string' ||
+      typeof p.hrpUserId !== 'string' ||
+      !Array.isArray(p.allowedLaborProfileIds) ||
+      !Array.isArray(p.fixtures) ||
+      typeof p.seed !== 'number'
+    ) {
+      return respondJson(res, 422, { error: 'VALIDATION_ERROR', message: 'Yêu cầu không hợp lệ.' }, ctx);
+    }
+    const sessionRef = seedSynthetic(getEmbedDeps(), {
+      organizationId: p.organizationId,
+      serviceId: p.serviceId,
+      hrpUserId: p.hrpUserId,
+      allowedLaborProfileIds: p.allowedLaborProfileIds as string[],
+      fixtures: (p.fixtures as Array<{ laborProfileId?: string; fullName?: string }>).map((f) => ({
+        laborProfileId: typeof f.laborProfileId === 'string' ? f.laborProfileId : '',
+        fullName: typeof f.fullName === 'string' ? f.fullName : '',
+      })),
+      seed: p.seed,
+    });
+    return respondJson(res, 200, { sessionRef }, ctx);
+  }
+
+  // ── B.03-PREP: POST /api/embed/revoke → [dev only] revoke a session ────
+  if (path === '/api/embed/revoke' && req.method === 'POST') {
+    if (config.nodeEnv === 'production') {
+      return respondJson(res, 403, { error: 'forbidden', message: 'Not available in production.' }, ctx);
+    }
+    const raw = await readRawBodyLimited(req);
+    let payload: unknown;
+    try {
+      payload = raw.length === 0 ? {} : JSON.parse(raw);
+    } catch {
+      return respondJson(res, 422, { error: 'VALIDATION_ERROR', message: 'Yêu cầu không hợp lệ.' }, ctx);
+    }
+    const sessionRef = (payload as { sessionRef?: unknown }).sessionRef;
+    if (typeof sessionRef !== 'string') {
+      return respondJson(res, 422, { error: 'VALIDATION_ERROR', message: 'Yêu cầu không hợp lệ.' }, ctx);
+    }
+    const ok = getEmbedDeps().registry.revoke(sessionRef);
+    return respondJson(res, 200, { revoked: ok }, ctx);
   }
 
   // ── R4: GET /api/review/unresolved → queries CORE/1.7 review service ────

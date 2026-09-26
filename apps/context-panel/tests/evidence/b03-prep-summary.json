@@ -1,0 +1,75 @@
+{
+  "baseUrl": "http://127.0.0.1:15503",
+  "startedAt": "2026-09-26T08:25:59.554Z",
+  "tests": [
+    {
+      "name": "panel-render-canonical",
+      "ok": true,
+      "note": "name=\"N•• V•• A••\" badge=\"MOCK / SYNTHETIC\""
+    },
+    {
+      "name": "target-change-stale-invalidated",
+      "ok": true,
+      "note": "target=lp-002 name2=\"T•• T•• B••\""
+    },
+    {
+      "name": "revoke-clears-context",
+      "ok": true,
+      "note": "denyCode=\"code: SESSION_REVOKED\" viMessage=\"Vui lòng đăng nhập lại.\""
+    },
+    {
+      "name": "foreign-origin-rejected",
+      "ok": true,
+      "note": "denyCode=\"code: BAD_ORIGIN\""
+    },
+    {
+      "name": "missing-session-denied",
+      "ok": true,
+      "note": "denyCode=\"code: SCHEMA_FAILED\""
+    },
+    {
+      "name": "forbidden-field-rejected",
+      "ok": true,
+      "note": "denyCode=\"code: FORBIDDEN_FIELD\""
+    },
+    {
+      "name": "oversized-payload-rejected",
+      "ok": true,
+      "note": "denyCode=\"code: FORBIDDEN_FIELD\""
+    },
+    {
+      "name": "panel-narrow-380",
+      "ok": true,
+      "note": "frameWidth=380"
+    },
+    {
+      "name": "keyboard-focus",
+      "ok": true,
+      "note": "{\"tag\":\"BUTTON\",\"id\":\"btn-wide\",\"w\":143.6875,\"h\":30.1875}"
+    },
+    {
+      "name": "api-missing-session-401",
+      "ok": true,
+      "note": "status=401"
+    },
+    {
+      "name": "api-wrong-object-403",
+      "ok": true,
+      "note": "status=403 body={\"error\":\"OBJECT_NOT_PERMITTED\",\"message\":\"Bạn không có quyền xem hồ sơ này.\"}"
+    },
+    {
+      "name": "api-validation-422",
+      "ok": true,
+      "note": "status=422"
+    },
+    {
+      "name": "no-cross-target-leak",
+      "ok": true,
+      "note": "activeA=\"lp-001\" A=\"N•• V•• A••\" B=\"T•• T•• B••\""
+    }
+  ],
+  "notes": "B.03-PREP synthetic/local only; real Chatwoot NOT verified; HRP runtime NOT verified.",
+  "finishedAt": "2026-09-26T08:26:03.535Z",
+  "pass": 13,
+  "fail": 0
+}
