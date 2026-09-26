@@ -123,25 +123,64 @@ describe('REPRO: receiver 503 store_unavailable (C2-05 honest classification)', 
   });
 
   after(async () => {
+    // R6-06: lifecycle evidence. We attempt every teardown step
+    // independently so a failure in one does not block the others, and
+    // each step records its own phase marker.
     phase('after_start');
-    try {
-      if (receiver) {
-        await new Promise((resolve, reject) => {
-          receiver.server.close((err) => (err ? reject(err) : resolve()));
+    const receiversToClose = [];
+    if (receiver) receiversToClose.push(receiver);
+    for (const r of receiversToClose) {
+      try {
+        await new Promise((resolve) => {
+          try {
+            // R6-06: closeAllConnections drains any in-flight keep-alive
+            // sockets so server.close() resolves and the event loop can
+            // exit naturally after teardown.
+            try {
+              if (typeof r.server.closeAllConnections === 'function') {
+                r.server.closeAllConnections();
+                phase('receiver_close_all_connections_invoked');
+              }
+            } catch (e) {
+              phase('receiver_close_all_connections_err', { error: (e && e.message) || String(e) });
+            }
+            r.server.close((err) => {
+              if (err) phase('receiver_close_err', { error: (err && err.message) || String(err) });
+              resolve();
+            });
+          } catch (e) {
+            phase('receiver_close_throw', { error: (e && e.message) || String(e) });
+            resolve();
+          }
         });
         phase('receiver_closed');
+      } catch (e) {
+        phase('receiver_close_failed', { error: (e && e.message) || String(e) });
       }
-    } catch (e) {
-      phase('receiver_close_failed', { error: (e && e.message) || String(e) });
     }
+
+    // R6-06: undici / global dispatcher note. The reproducer posts with
+    // `Connection: close`, so undici does not keep-alive sockets open
+    // after the burst. We do not own a custom dispatcher, so record
+    // `not_owned` to make that explicit in the evidence.
+    phase('dispatcher_closed', { reason: 'not_owned', note: 'fetch default dispatcher; Connection: close avoids keep-alive' });
+
+    // R6-06: prisma_disconnected is owned by harness.stop() — record
+    // the expected ownership, then let harness.stop() do the actual
+    // disconnect exactly once (C-B02-2 invariant).
+    phase('prisma_disconnect_owned_by_harness', { ok: true });
+
     if (harness) {
       try {
+        phase('pg_stop_started');
         await harness.stop();
         phase('harness_stopped');
       } catch (e) {
         phase('harness_stop_failed', { error: (e && e.message) || String(e) });
+        throw e;
       }
     }
+
     // T1-B round-3 / C3-05: NO hard-exit guard.
     //
     // The runner has its own outer timeout (B02_REPRO_TIMEOUT_MS, default

@@ -235,11 +235,23 @@ async function runOnce(i, evidenceRunDir) {
 
   // Outer data-dir cleanup (happy path only — killTreeScoped handles it
   // on the timeout branch).
+  // R6-07: only remove the dataDir if the port is actually closed
+  // AND the TCP probe is non-connectable. Otherwise keep the directory
+  // for recovery and record `skipped_port_still_open`.
   let dataDirCleanup = cleanup && cleanup.dataDirRemoved ? cleanup.dataDirRemoved : 'not_attempted';
   if (dataDirCleanup === 'pending_outer_cleanup') {
     const { existsSync } = await import('node:fs');
     const { rm } = await import('node:fs/promises');
-    if (existsSync(dataDir)) {
+    if (!existsSync(dataDir)) {
+      dataDirCleanup = 'absent';
+    } else if (
+      cleanup &&
+      cleanup.audit1 &&
+      cleanup.audit2 &&
+      cleanup.audit1.closed === true &&
+      cleanup.audit2.closed === true &&
+      cleanup.tcpClosed === true
+    ) {
       try {
         await rm(dataDir, { recursive: true, force: true });
         dataDirCleanup = 'removed';
@@ -247,7 +259,8 @@ async function runOnce(i, evidenceRunDir) {
         dataDirCleanup = 'failed: ' + ((e && e.message) || String(e));
       }
     } else {
-      dataDirCleanup = 'absent';
+      // Port is still open or TCP is still connectable: keep dataDir.
+      dataDirCleanup = 'skipped_port_still_open';
     }
   }
 

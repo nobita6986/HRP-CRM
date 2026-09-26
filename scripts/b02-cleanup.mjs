@@ -180,9 +180,31 @@ export function runTaskkill(args, timeoutMs) {
     stderr = (e && e.stderr && e.stderr.toString()) || '';
     stdout = (e && e.stdout && e.stdout.toString()) || '';
     if (code === 128) {
+      // R6-07: code 128 means the PID is no longer in the OS process
+      // table — the OS reports it as not found. This is the
+      // already-gone / stale-PID case the cleanup helper relies on.
       return {
         ok: true,
         alreadyGone: true,
+        code,
+        stdout,
+        stderr,
+        durationMs: Date.now() - startedAt,
+      };
+    }
+    // R6-07: Windows taskkill /T /F exits 255 when at least one
+    // descendant PID was already gone by the time the tree walk
+    // reached it. The root tree may still be fully terminated — check
+    // stdout for SUCCESS lines and consider the call a partial pass
+    // (alreadyGone=false because the call itself errored, but
+    // partialSuccess=true so the caller can avoid setting a failure
+    // stage for the root kill when the tree actually died).
+    const partialSuccess = /SUCCESS:\s+The process with PID \d+/.test(stdout);
+    if (partialSuccess) {
+      return {
+        ok: true,
+        alreadyGone: false,
+        partialSuccess: true,
         code,
         stdout,
         stderr,
@@ -305,65 +327,83 @@ export function tcpProbeConnect(port, timeoutMs) {
  *   { ok: true,  iterations, elapsedMs, finalAudit, finalProbe }
  *   { ok: false, iterations, elapsedMs, finalAudit, finalProbe, reason }
  */
+/**
+ * R6-05 fix: bounded port-close polling.
+ *
+ *   - `startedAt` is captured ONCE at function entry.
+ *   - `elapsedMs` is always `Date.now() - startedAt` — never reset per
+ *     loop iteration, so a `deadline_exceeded` reports the full budget
+ *     used, not just the last poll cycle.
+ *   - Every return carries `timeoutBudgetMs`, `pollIntervalMs`,
+ *     `iterations`, `elapsedMs`, `finalAudit`, `finalProbe`, `reason`.
+ *
+ * Returns:
+ *   {
+ *     ok: true|false,
+ *     iterations,
+ *     elapsedMs,
+ *     timeoutBudgetMs,
+ *     pollIntervalMs,
+ *     finalAudit,
+ *     finalProbe,
+ *     reason,
+ *   }
+ */
 export async function boundedWaitPortClosed(port, timeoutMs) {
   const budget = timeoutMs != null ? timeoutMs : PORT_CLOSE_POLL_TIMEOUT_MS;
   const interval = PORT_CLOSE_POLL_INTERVAL_MS;
-  const deadline = Date.now() + budget;
+  const startedAt = Date.now();
+  const deadline = startedAt + budget;
   let iterations = 0;
   let lastAudit = null;
   let lastProbe = null;
-  let lastObservedAt = Date.now();
   while (Date.now() < deadline) {
     iterations += 1;
     const audit = auditLeftovers(port);
     lastAudit = audit;
     if (audit.available === false) {
-      // Netstat unavailable — bail out, the helper treats this as
-      // fail-closed. Record the gap so evidence shows the poll cadence.
       lastProbe = null;
       return {
         ok: false,
         iterations,
-        elapsedMs: Date.now() - lastObservedAt,
+        elapsedMs: Date.now() - startedAt,
+        timeoutBudgetMs: budget,
+        pollIntervalMs: interval,
         finalAudit: audit,
         finalProbe: lastProbe,
         reason: 'netstat_unavailable',
       };
     }
     if (audit.closed === true) {
-      // Cross-check with TCP probe (R5-03).
       const probe = await tcpProbeConnect(port);
       lastProbe = probe;
       if (probe.connectable === false) {
         return {
           ok: true,
           iterations,
-          elapsedMs: Date.now() - lastObservedAt,
+          elapsedMs: Date.now() - startedAt,
+          timeoutBudgetMs: budget,
+          pollIntervalMs: interval,
           finalAudit: audit,
           finalProbe: probe,
+          reason: 'port_closed',
         };
       }
-      // Netstat says closed but TCP says connectable. Keep polling;
-      // this is the brief's "PID-not-found but port still listening"
-      // scenario and we need extra time.
     } else {
-      // Still listening — only run TCP probe every 4th iteration to
-      // keep the poll responsive; the OS connect probe is much slower
-      // than netstat and we already know the port is open.
+      // Still listening — periodically cross-check TCP so the deadline
+      // path reflects both netstat AND TCP evidence.
       if (iterations % 4 === 1) {
         lastProbe = await tcpProbeConnect(port);
-        if (lastProbe.connectable === true) {
-          // Confirm netstat's read.
-        }
       }
     }
-    lastObservedAt = Date.now();
     await new Promise((r) => setTimeout(r, interval));
   }
   return {
     ok: false,
     iterations,
-    elapsedMs: Date.now() - lastObservedAt,
+    elapsedMs: Date.now() - startedAt,
+    timeoutBudgetMs: budget,
+    pollIntervalMs: interval,
     finalAudit: lastAudit,
     finalProbe: lastProbe,
     reason: 'deadline_exceeded',
@@ -448,38 +488,86 @@ export function runPgCtlStop({ pgCtlPath, dataDir, timeoutMs }) {
 }
 
 /**
- * R5-04: validate that a dataDir belongs to the worktree and matches
- * the required `.tmp_pgdata_worker_*` prefix.
+ * R6-03: validate that a dataDir belongs to the worktree AND is usable
+ * by `pg_ctl stop`.
  *
- * Returns { ok, reason }.
+ * Two-stage answer:
+ *   - safe     : path grammar + worktree location + `.tmp_pgdata_worker_*`
+ *                prefix are correct.
+ *   - usable   : safe AND the directory exists on disk AND contains a
+ *                PostgreSQL marker (PG_VERSION or postmaster.pid).
+ *
+ * Returns:
+ *   {
+ *     safe: boolean,
+ *     usable: boolean,
+ *     reason: string,
+ *     dataDir?: string,
+ *     markers?: string[],
+ *   }
+ *
+ * Callers MUST NOT pass an unsafe / unusable directory to `pg_ctl stop`.
+ * Use safe=true but usable=false to classify a missing directory after
+ * `pg.stop()` deleted it (the legacy `persistent: false` failure mode).
  */
 export function validateWorkerDataDir({ dataDir, worktreeCwd }) {
   if (!dataDir || typeof dataDir !== 'string') {
-    return { ok: false, reason: 'dataDir_not_a_string' };
+    return { safe: false, usable: false, reason: 'dataDir_not_a_string' };
   }
-  // Normalize for prefix check.
   const base = path.basename(dataDir).replace(/\\/g, '/');
   if (!base.startsWith('.tmp_pgdata_worker_')) {
     return {
-      ok: false,
+      safe: false,
+      usable: false,
       reason: 'dataDir_does_not_match_prefix',
       basename: base,
     };
   }
+  let resolved = null;
   if (worktreeCwd) {
-    const resolved = path.resolve(dataDir);
+    resolved = path.resolve(dataDir);
     const root = path.resolve(worktreeCwd);
     const rel = path.relative(root, resolved);
     if (rel.startsWith('..') || path.isAbsolute(rel)) {
       return {
-        ok: false,
+        safe: false,
+        usable: false,
         reason: 'dataDir_outside_worktree',
         dataDir: resolved,
         worktreeCwd: root,
       };
     }
+  } else {
+    resolved = path.resolve(dataDir);
   }
-  return { ok: true, dataDir: path.resolve(dataDir) };
+  // Safe = path passes the prefix + worktree guard.
+  if (!existsSync(resolved)) {
+    return {
+      safe: true,
+      usable: false,
+      reason: 'safe_but_missing',
+      dataDir: resolved,
+    };
+  }
+  // R6-03: check for PostgreSQL markers.
+  const markers = [];
+  if (existsSync(path.join(resolved, 'PG_VERSION'))) markers.push('PG_VERSION');
+  if (existsSync(path.join(resolved, 'postmaster.pid'))) markers.push('postmaster.pid');
+  if (markers.length === 0) {
+    return {
+      safe: true,
+      usable: false,
+      reason: 'safe_but_no_pg_marker',
+      dataDir: resolved,
+    };
+  }
+  return {
+    safe: true,
+    usable: true,
+    reason: 'ok',
+    dataDir: resolved,
+    markers,
+  };
 }
 
 /**
@@ -551,10 +639,14 @@ export async function killTreeScoped({
   }
 
   // Step 1: terminate the spawned test tree.
+  // R6-07: a non-zero taskkill exit is NOT a failure stage when
+  // partialSuccess=true (the root tree was actually terminated,
+  // Windows taskkill /T /F returned 255 only because one descendant
+  // PID was already gone).
   if (rootPid != null && rootPid > 0) {
     const tk = runTaskkill(['/PID', String(rootPid), '/T', '/F']);
     pushStep({ step: 'taskkill_root', ...tk });
-    if (!tk.ok && !tk.alreadyGone) {
+    if (!tk.ok && !tk.alreadyGone && !tk.partialSuccess) {
       result.failureStage = 'taskkill_root';
       result.taskkillRoot = tk;
     }
@@ -592,10 +684,16 @@ export async function killTreeScoped({
     pushStep({ step: 'taskkill_port_owner', skipped: 'no_owner_or_owned_by_root' });
   }
 
-  // Step 3b: R5-03 PID refresh + retry. If the port still has a
+  // Step 3b: R5-03 / R6-07 PID refresh + retry. If the port still has a
   // listener after the initial taskkill, re-read netstat and try
-  // again with the FRESH owner PID. Bounded to 2 refresh iterations.
-  for (let refreshIter = 0; refreshIter < 2; refreshIter += 1) {
+  // again with the FRESH owner PID. Bounded to 3 refresh iterations,
+  // and CRITICALLY: track the set of PIDs we have already seen so that
+  // if netstat keeps returning the same stale PID (taskkill code 128
+  // means the OS process is gone but the listener is still reported
+  // against that PID), we stop retrying instead of looping.
+  const seenRefreshPids = new Set();
+  if (result.portOwner) seenRefreshPids.add(result.portOwner);
+  for (let refreshIter = 0; refreshIter < 3; refreshIter += 1) {
     const reAudit = auditLeftovers(suffixPort);
     if (reAudit.closed === true) {
       pushStep({
@@ -626,6 +724,18 @@ export async function killTreeScoped({
       });
       break;
     }
+    if (seenRefreshPids.has(freshPid)) {
+      pushStep({
+        step: 'pid_refresh',
+        iter: refreshIter,
+        skipped: 'stale_pid_repeated',
+        pid: freshPid,
+        audit: reAudit,
+      });
+      result.failureStage = result.failureStage || 'pid_refresh_stale';
+      break;
+    }
+    seenRefreshPids.add(freshPid);
     const tk = runTaskkill(['/PID', String(freshPid), '/T', '/F']);
     pushStep({
       step: 'pid_refresh',
@@ -652,13 +762,16 @@ export async function killTreeScoped({
     // pg_ctl stop fallback (R5-04).
   }
 
-  // Step 4: R5-04 PostgreSQL-aware fallback. Validate dataDir first;
-  // never run pg_ctl stop on an unvalidated directory.
+  // Step 4: R5-04 / R6-03 PostgreSQL-aware fallback. Validate dataDir
+  // first; never run pg_ctl stop on an unvalidated or unusable
+  // directory. R6-03 distinguishes `safe` (path passes the prefix +
+  // worktree guard) from `usable` (safe AND directory exists AND has
+  // a PG marker). pg_ctl only runs when usable=true.
   if (dataDir && tcpAfterKill.connectable === true) {
     const validation = validateWorkerDataDir({ dataDir, worktreeCwd });
     result.pgCtlValidation = validation;
     pushStep({ step: 'pg_ctl_validation', ...validation });
-    if (validation.ok) {
+    if (validation.usable === true) {
       const pgCtlPath = findEmbeddedPgCtl({ worktreeCwd });
       if (pgCtlPath) {
         pushStep({ step: 'pg_ctl_path', path: pgCtlPath });
@@ -686,7 +799,8 @@ export async function killTreeScoped({
         result.failureStage = result.failureStage || 'pg_ctl_path_missing';
       }
     } else {
-      result.failureStage = result.failureStage || 'pg_ctl_validation';
+      // R6-03: safe_but_missing or safe_but_no_pg_marker. Fail closed.
+      result.failureStage = result.failureStage || 'pg_ctl_validation_' + validation.reason;
     }
   }
 

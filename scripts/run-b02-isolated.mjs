@@ -289,11 +289,22 @@ async function runOnce(idx, evidenceRunDir) {
   // branch. On the happy-path branch the test process owns its own
   // data dir cleanup via pg-worker-harness; we still sweep here as
   // a final safety net (best-effort).
+  // R6-07: do NOT delete the dataDir while the port is still open or
+  // TCP is still connectable. Skip with `skipped_port_still_open`.
   let dataDirCleanup = cleanup && cleanup.dataDirRemoved ? cleanup.dataDirRemoved : 'not_attempted';
   if (dataDirCleanup === 'pending_outer_cleanup') {
     const { existsSync } = await import('node:fs');
     const { rm } = await import('node:fs/promises');
-    if (existsSync(dataDir)) {
+    if (!existsSync(dataDir)) {
+      dataDirCleanup = 'absent';
+    } else if (
+      cleanup &&
+      cleanup.audit1 &&
+      cleanup.audit2 &&
+      cleanup.audit1.closed === true &&
+      cleanup.audit2.closed === true &&
+      cleanup.tcpClosed === true
+    ) {
       try {
         await rm(dataDir, { recursive: true, force: true });
         dataDirCleanup = 'removed';
@@ -301,7 +312,7 @@ async function runOnce(idx, evidenceRunDir) {
         dataDirCleanup = 'failed: ' + ((e && e.message) || String(e));
       }
     } else {
-      dataDirCleanup = 'absent';
+      dataDirCleanup = 'skipped_port_still_open';
     }
   }
 

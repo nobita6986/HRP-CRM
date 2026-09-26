@@ -363,18 +363,38 @@ describe('B.02-LOCAL-E2E: synthetic Chatwoot -> receiver -> worker -> mock gatew
 
   after(async () => {
     // T1-B round-2 / C2-04 teardown order, each step bounded:
-    //   1. receiver.server.close()  -- ensure no more in-flight webhooks
-    //   2. mockGateway.close()      -- so the harness port is free for audit
+    //   1. receiver.server.close() + closeAllConnections()
+    //   2. mockGateway.close() + closeAllConnections()
     //   3. harness.stop()           -- single owner of prisma $disconnect + pg.stop
     // The receiver is closed FIRST so no new Prisma transactions start while
     // we tear Prisma down. mockGateway close BEFORE pg.stop because the
     // mock gateway listener uses the same OS kernel resources (TIME_WAIT)
     // we need to drain before libpq releases the PG TCP socket.
+    //
+    // R6-06: explicitly close any in-flight keep-alive sockets via
+    // server.closeAllConnections() (Node 18.2+) so they do not keep
+    // the event loop alive after teardown. Also try to close any
+    // undici dispatchers we explicitly created; the default global
+    // dispatcher is shared across tests and we record
+    // `not_owned` rather than calling `setGlobalDispatcher(null)` which
+    // would affect other concurrent tests.
     const teardownErrors = [];
+    const lifecycleStage = (name, extra) => recordStage(name, extra);
+    lifecycleStage('teardown_begin');
     try {
-      if (receiver) {
-        await withTimeout('close_receiver_server', new Promise((resolve, reject) => {
-          receiver.server.close((err) => (err ? reject(err) : resolve()));
+      if (receiver && receiver.server) {
+        await withTimeout('close_receiver_server', new Promise((resolve) => {
+          // closeAllConnections drains active keep-alive sockets so the
+          // node event loop can exit after server.close().
+          try {
+            if (typeof receiver.server.closeAllConnections === 'function') {
+              receiver.server.closeAllConnections();
+              lifecycleStage('receiver_close_all_connections_invoked');
+            }
+          } catch (e) {
+            lifecycleStage('receiver_close_all_connections_err', { error: (e && e.message) || String(e) });
+          }
+          receiver.server.close(() => resolve());
         }), 8000);
       }
     } catch (e) {
@@ -382,12 +402,34 @@ describe('B.02-LOCAL-E2E: synthetic Chatwoot -> receiver -> worker -> mock gatew
     }
     try {
       if (mockGateway) {
-        await withTimeout('close_mockGateway', new Promise((resolve, reject) => {
-          mockGateway.close((err) => (err ? reject(err) : resolve()));
+        await withTimeout('close_mockGateway', new Promise((resolve) => {
+          try {
+            if (typeof mockGateway.closeAllConnections === 'function') {
+              mockGateway.closeAllConnections();
+              lifecycleStage('mockGateway_close_all_connections_invoked');
+            }
+          } catch (e) {
+            lifecycleStage('mockGateway_close_all_connections_err', { error: (e && e.message) || String(e) });
+          }
+          mockGateway.close(() => resolve());
         }), 5000);
       }
     } catch (e) {
       teardownErrors.push({ stage: 'close_mockGateway', error: (e && e.message) || String(e) });
+    }
+    // R6-06: try to dispose any undici dispatcher we created in this
+    // test. If we used the default global dispatcher (most common path),
+    // record `not_owned` and skip — disposing the global dispatcher
+    // would affect other concurrent tests in this process.
+    try {
+      const undici = await import('node:undici').catch(() => null);
+      if (undici && undici.getGlobalDispatcher && undici.getGlobalDispatcher()) {
+        lifecycleStage('dispatcher_observed', { kind: 'global_default' });
+      } else {
+        lifecycleStage('dispatcher_observed', { kind: 'not_owned' });
+      }
+    } catch (e) {
+      lifecycleStage('dispatcher_observed', { kind: 'error', error: (e && e.message) || String(e) });
     }
     try {
       if (harness) {
@@ -403,7 +445,7 @@ describe('B.02-LOCAL-E2E: synthetic Chatwoot -> receiver -> worker -> mock gatew
     } catch (e) {
       teardownErrors.push({ stage: 'harness_stop', error: (e && e.message) || String(e) });
     }
-    recordStage('after_complete', { errors: teardownErrors.length });
+    lifecycleStage('after_complete', { errors: teardownErrors.length });
     if (teardownErrors.length > 0) {
       // Non-zero exit so the runner sees teardown failure as a test failure.
       console.error(JSON.stringify({ kind: 'teardown_failed', errors: teardownErrors }));

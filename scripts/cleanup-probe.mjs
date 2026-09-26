@@ -42,6 +42,7 @@ import {
   killTreeScoped,
   awaitChildClose,
   auditLeftovers,
+  boundedWaitPortClosed,
   summarizeCleanup,
   tcpProbeConnect,
   validateWorkerDataDir,
@@ -61,7 +62,9 @@ const EVIDENCE_DIR = path.resolve(
 );
 const HAPPY_MODE = process.env['B02_PROBE_HAPPY'] === '1';
 const ORPHAN_MODE = process.env['B02_PROBE_ORPHAN'] === '1';
+const TIMING_MODE = process.env['B02_TIMING_PROBE'] === '1';
 const PROBE_TIMEOUT_MS = Number(process.env['B02_PROBE_TIMEOUT_MS'] ?? '1500');
+const TIMING_BUDGET_MS = Number(process.env['B02_TIMING_BUDGET_MS'] ?? '1200');
 
 function findFreePort() {
   return new Promise((resolve, reject) => {
@@ -160,7 +163,203 @@ process.stdout.write(JSON.stringify({ kind: 'orphan_root_started', grandchildPid
 process.exit(0);
 `;
 
+/**
+ * R6-05 timing probe child.
+ *
+ *   Opens a listener that stays open until killed (no natural close).
+ *   The probe calls boundedWaitPortClosed(port, TIMING_BUDGET_MS)
+ *   against this listener and asserts elapsedMs is approximately
+ *   equal to the budget (with a small tolerance for poll cadence).
+ *
+ * Usage:
+ *   node cleanup-probe-timing-child.cjs <port>
+ */
+const TIMING_CHILD_SOURCE = `
+const net = require('node:net');
+const port = Number(process.argv[2]);
+const s = net.createServer();
+s.on('error', (e) => {
+  process.stderr.write(JSON.stringify({ kind: 'timing_child_error', error: e.message }) + '\\n');
+  process.exit(2);
+});
+s.listen(port, '127.0.0.1', () => {
+  process.stdout.write(JSON.stringify({ kind: 'timing_child_listening', port, pid: process.pid }) + '\\n');
+});
+process.on('SIGTERM', () => { s.close(() => process.exit(0)); });
+process.on('SIGINT', () => { s.close(() => process.exit(0)); });
+`;
+
+/**
+ * R6-05 timing probe.
+ *
+ *   - Opens a TCP listener that intentionally never closes.
+ *   - Calls boundedWaitPortClosed(port, TIMING_BUDGET_MS).
+ *   - Asserts:
+ *       bounded.ok === false
+ *       bounded.reason === 'deadline_exceeded'
+ *       bounded.elapsedMs >= budget - tolerance
+ *       bounded.elapsedMs <= budget + pollInterval * 4
+ *       bounded.iterations > 1
+ *       bounded.timeoutBudgetMs === budget
+ *       bounded.pollIntervalMs > 0
+ *   - Closes the listener manually so the port is freed.
+ *   - Writes summary + meta to the evidence dir.
+ *   - Exit codes: 2 = PROBE_PASS, 1 = PROBE_FAIL.
+ */
+async function runTimingProbe() {
+  const { spawn } = await import('node:child_process');
+  const { writeFile: wfSync } = await import('node:fs/promises');
+  const evidenceRunDir = path.join(EVIDENCE_DIR, 'timing-' + String(Date.now()));
+  await mkdir(evidenceRunDir, { recursive: true });
+  const metaPath = path.join(evidenceRunDir, 'probe.meta.json');
+  const stdoutPath = path.join(evidenceRunDir, 'probe.stdout.txt');
+  const stderrPath = path.join(evidenceRunDir, 'probe.stderr.txt');
+  const summaryPath = path.join(evidenceRunDir, 'summary.json');
+
+  const port = await findFreePort();
+  const startedAt = Date.now();
+  const budget = TIMING_BUDGET_MS;
+
+  const tmpChildPath = path.join(evidenceRunDir, 'cleanup-probe-timing-child.cjs');
+  await wfSync(tmpChildPath, TIMING_CHILD_SOURCE, 'utf8');
+
+  const child = spawn(
+    process.execPath,
+    [tmpChildPath, String(port)],
+    {
+      cwd: __dirname,
+      env: { ...process.env, NODE_ENV: 'development' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    },
+  );
+  let stdoutRaw = '';
+  let stderrRaw = '';
+  child.stdout.on('data', (d) => (stdoutRaw += d.toString()));
+  child.stderr.on('data', (d) => (stderrRaw += d.toString()));
+
+  // Wait for the child to bind the port.
+  const listenDeadline = Date.now() + 5000;
+  while (Date.now() < listenDeadline) {
+    if (stdoutRaw.includes('"timing_child_listening"')) break;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  const childListening = stdoutRaw.includes('"timing_child_listening"');
+  const tcpBefore = await tcpProbeConnect(port);
+
+  // Run boundedWaitPortClosed against the listening port.
+  const bounded = await boundedWaitPortClosed(port, budget);
+  const tcpAfter = await tcpProbeConnect(port);
+
+  // Cleanup the timing child now that we have what we need.
+  // On Windows, SIGTERM does not always reach Node children spawned via
+  // stdio pipes — use taskkill /T /F which has its own /T tree walk.
+  try {
+    const { runTaskkill } = await import('./b02-cleanup.mjs').then((m) => ({ runTaskkill: m.runTaskkill }));
+    if (process.platform === 'win32') {
+      runTaskkill(['/PID', String(child.pid), '/T', '/F']);
+    } else {
+      child.kill('SIGTERM');
+    }
+  } catch {}
+  const childClose = await awaitChildClose(child, 3000);
+  // Best-effort audit: re-probe the port. On Windows, a SIGTERM-ed
+  // Node child may need an extra moment to release the socket; do a
+  // brief bounded re-poll.
+  let tcpAfterCleanup = await tcpProbeConnect(port);
+  const startWait = Date.now();
+  while (tcpAfterCleanup.connectable === true && Date.now() - startWait < 3000) {
+    await new Promise((r) => setTimeout(r, 100));
+    tcpAfterCleanup = await tcpProbeConnect(port);
+  }
+
+  // Assertions.
+  const toleranceMs = 250;
+  const upperBound = budget + 1000; // allow poll cadence slack
+  const checks = {
+    child_listening_seen: childListening,
+    tcp_before_connectable: tcpBefore.connectable === true,
+    bounded_ok_false: bounded.ok === false,
+    bounded_reason_deadline: bounded.reason === 'deadline_exceeded',
+    bounded_elapsed_in_range:
+      typeof bounded.elapsedMs === 'number' &&
+      bounded.elapsedMs >= budget - toleranceMs &&
+      bounded.elapsedMs <= upperBound,
+    bounded_iterations_gt_one: bounded.iterations > 1,
+    bounded_budget_recorded: bounded.timeoutBudgetMs === budget,
+    bounded_poll_interval_recorded:
+      typeof bounded.pollIntervalMs === 'number' && bounded.pollIntervalMs > 0,
+    listener_cleaned_up: tcpAfterCleanup.connectable === false,
+  };
+  const passed = Object.values(checks).every((v) => v === true);
+
+  const summary = {
+    startedAt: new Date(startedAt).toISOString(),
+    finishedAt: new Date().toISOString(),
+    elapsedMs: Date.now() - startedAt,
+    mode: 'timing_probe',
+    port,
+    budget,
+    toleranceMs,
+    upperBound,
+    tcpBefore: tcpBefore.connectable,
+    bounded: {
+      ok: bounded.ok,
+      iterations: bounded.iterations,
+      elapsedMs: bounded.elapsedMs,
+      timeoutBudgetMs: bounded.timeoutBudgetMs,
+      pollIntervalMs: bounded.pollIntervalMs,
+      reason: bounded.reason,
+    },
+    tcpAfterBounded: tcpAfter.connectable,
+    tcpAfterCleanup: tcpAfterCleanup.connectable,
+    childClose,
+    checks,
+    verdict: passed ? 'PROBE_PASS' : 'PROBE_FAIL',
+    evidenceFiles: {
+      meta: metaPath,
+      stdout: stdoutPath,
+      stderr: stderrPath,
+      summary: summaryPath,
+    },
+  };
+  const meta = { ...summary, stdout: stdoutRaw, stderr: stderrRaw };
+  await writeFile(stdoutPath, stdoutRaw);
+  await writeFile(stderrPath, stderrRaw);
+  await writeFile(metaPath, JSON.stringify(meta, null, 2));
+  await writeFile(summaryPath, JSON.stringify(summary, null, 2));
+
+  console.log('[cleanup-probe:timing] verdict=' + summary.verdict);
+  console.log(
+    '[cleanup-probe:timing] port=' +
+      port +
+      ' budget=' +
+      budget +
+      ' elapsedMs=' +
+      bounded.elapsedMs +
+      ' iterations=' +
+      bounded.iterations +
+      ' reason=' +
+      bounded.reason +
+      ' tcpBefore=' +
+      tcpBefore.connectable +
+      ' tcpAfterCleanup=' +
+      tcpAfterCleanup.connectable,
+  );
+  console.log('[cleanup-probe:timing] checks=' + JSON.stringify(checks));
+
+  process.exit(passed ? 2 : 1);
+}
+
 async function main() {
+  // R6-05 timing probe: short-circuits the normal runner flow. We open
+  // a listener on a free port, ask boundedWaitPortClosed to time out
+  // against it with a short budget, and verify elapsedMs reflects the
+  // full budget (not the last poll cycle).
+  if (TIMING_MODE) {
+    return runTimingProbe();
+  }
+
   const evidenceRunDir = path.join(EVIDENCE_DIR, String(Date.now()));
   await mkdir(evidenceRunDir, { recursive: true });
   const metaPath = path.join(evidenceRunDir, 'probe.meta.json');
