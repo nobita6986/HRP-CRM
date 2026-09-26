@@ -3,7 +3,7 @@
 **Worktree:** `D:\CodeApp\Hrp-Crm-v79b-b02-e2e-r1`
 **Branch:** `codex/v79b-b02-local-e2e-r1`
 **Parent commit:** `e0dd638539e813fc4aa9bac8c7a1b4f7924d04d8`
-**Correction commit (this round):** `TBD_AFTER_COMMIT`
+**Correction commit (this round):** `967e790ed2f57df5463c0c491ebeaf58d342746e`
 **Correction round:** R6 (per T0 R6-01..R6-09 verdict, CHANGES_REQUIRED on R5)
 **T0 verdict awaiting:** `READY_FOR_T0_B02_LOCAL_E2E_RECHECK_R6`
 
@@ -331,7 +331,7 @@ first-class editing tools.
 | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Root cause of dataDir disappearing                            | `persistent: false` let the embedded-postgres library remove the cluster before the listener was released; pg_ctl fallback then had no directory to operate on. R6-01 forces persistent true. |
 | R6-01..R6-09 mapping                                          | See Section 2.                                                                                                                                                                               |
-| Correction commit                                             | TBD_AFTER_COMMIT (single new commit on top of e0dd638).                                                                                                                                      |
+| Correction commit                                             | 967e790ed2f57df5463c0c491ebeaf58d342746e (single new commit on top of e0dd638).                                                                                                                                      |
 | Parent commit                                                 | e0dd638539e813fc4aa9bac8c7a1b4f7924d04d8.                                                                                                                                                    |
 | Changed file list                                             | 7 files (Section 5.1).                                                                                                                                                                        |
 | 7-group LASTEXITCODE ledger                                   | All 7 PASS (Section 3, top table).                                                                                                                                                           |
