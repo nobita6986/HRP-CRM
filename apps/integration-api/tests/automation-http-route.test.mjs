@@ -22,7 +22,6 @@ import {
   TokenBucketRateLimiter,
   MockAutomationAdapter,
   AutomationHttpHandler,
-  canonicalJson,
   payloadDigestHex,
   hmacSha256Hex,
 } from '../dist/automation/index.js';
@@ -71,9 +70,9 @@ function envelopeDigest(envelope) {
   if (automationSource && typeof automationSource === 'object') {
     const { n8nExecutionId, ...srcRest } = automationSource;
     void n8nExecutionId;
-    return payloadDigestHex(canonicalJson({ ...rest, automationSource: srcRest }));
+    return payloadDigestHex({ ...rest, automationSource: srcRest });
   }
-  return payloadDigestHex(canonicalJson(rest));
+  return payloadDigestHex(rest);
 }
 
 function makeEnvelope(op, payloadOverrides = {}, envelopeOverrides = {}) {

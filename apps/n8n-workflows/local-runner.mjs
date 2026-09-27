@@ -100,6 +100,12 @@ export function hmacSha256Hex(input, secret) {
 
 /* ---------------- envelope helpers (mirroring gateway stripNonDigestFields) ---------------- */
 
+/* N8N/1.1 R2 correction: payloadDigestHex() canonicalises its argument
+   internally (sha256Hex(canonical(value))). The previous version of
+   this helper computed sha256Hex(canonical(canonical(stripped))) -- a
+   double canonicalisation that agreed with the gateway bug but not
+   with the contract. The gateway now passes the stripped object
+   directly; this helper mirrors that. */
 export function envelopeDigest(envelope) {
   const { correlationId, occurredAt, commandId, automationSource, ...rest } =
     envelope;
@@ -109,9 +115,9 @@ export function envelopeDigest(envelope) {
   if (automationSource && typeof automationSource === 'object') {
     const { n8nExecutionId, ...srcRest } = automationSource;
     void n8nExecutionId;
-    return sha256Hex(canonicalJson(canonicalJson({ ...rest, automationSource: srcRest })));
+    return sha256Hex(canonicalJson({ ...rest, automationSource: srcRest }));
   }
-  return sha256Hex(canonicalJson(canonicalJson(rest)));
+  return sha256Hex(canonicalJson(rest));
 }
 
 export function scopeKeyFor(args) {

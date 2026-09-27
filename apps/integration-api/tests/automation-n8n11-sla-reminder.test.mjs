@@ -159,7 +159,7 @@ async function bootServer(handler) {
 }
 
 async function dispatch(url, envelope, organizationId = ORG_A, connectionId = CONN_A) {
-  const { canonicalJson, sha256Hex, hmacSha256Hex, payloadDigestHex } = await import(
+  const { sha256Hex, hmacSha256Hex, payloadDigestHex } = await import(
     '../dist/automation/index.js'
   );
   const { stripNonDigestFields } = await import('../dist/automation/gateway.js').catch(
@@ -176,7 +176,9 @@ async function dispatch(url, envelope, organizationId = ORG_A, connectionId = CO
   } else {
     forDigest = rest;
   }
-  const digest = payloadDigestHex(canonicalJson(forDigest));
+  // N8N/1.1 R2 correction: payloadDigestHex() already canonicalizes its
+  // argument internally; do NOT pre-canonicalize here.
+  const digest = payloadDigestHex(forDigest);
   const scopeKey =
     organizationId +
     '\u0000' + connectionId + '\u0000' + SERVICE_ID +

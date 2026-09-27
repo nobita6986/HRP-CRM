@@ -34,7 +34,6 @@ import {
   KillSwitchStore,
   TokenBucketRateLimiter,
   MockAutomationAdapter,
-  canonicalJson,
   payloadDigestHex,
   hmacSha256Hex,
 } from '../dist/automation/index.js';
@@ -78,15 +77,21 @@ function fixtureItem(id, overrides = {}) {
 
 // Digest EXCLUDING correlationId, occurredAt, commandId, and n8nExecutionId
 // (matches the gateway's internal logic).
+//
+// N8N/1.1 R2 correction: payloadDigestHex() already canonicalizes its
+// argument internally (sha256Hex(canonical(value))). Wrapping the
+// argument in canonicalJson() a second time caused the test helper
+// and the gateway to compute DIFFERENT digests for the same envelope.
+// Pass the structured object directly.
 function envelopeDigest(envelope) {
   const { correlationId, occurredAt, commandId, automationSource, ...rest } = envelope;
   void correlationId; void occurredAt; void commandId;
   if (automationSource && typeof automationSource === 'object') {
     const { n8nExecutionId, ...srcRest } = automationSource;
     void n8nExecutionId;
-    return payloadDigestHex(canonicalJson({ ...rest, automationSource: srcRest }));
+    return payloadDigestHex({ ...rest, automationSource: srcRest });
   }
-  return payloadDigestHex(canonicalJson(rest));
+  return payloadDigestHex(rest);
 }
 
 function makeEnvelope(op, payloadOverrides = {}, envelopeOverrides = {}) {

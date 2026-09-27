@@ -49,7 +49,6 @@ import { AutomationIdempotencyStore } from './idempotency-store.js';
 import { AutomationAdapter } from './mock-adapter.js';
 import { DependencyOfflineError, TimeoutError } from './errors.js';
 import {
-  canonicalJson,
   payloadDigestHex,
   hmacSha256Hex,
   safeEqualHex,
@@ -253,8 +252,17 @@ export class AutomationGateway {
     // digest) under a DIFFERENT correlationId is treated as a
     // separate logical flow and 409s as IDEMPOTENCY_CONFLICT
     // (correlation_id_mismatch); see AutomationIdempotencyStore.
+    //
+    // N8N/1.1 R2 correction: payloadDigestHex() already canonicalizes
+    // its argument internally (sha256Hex(canonical(value))). Passing
+    // a pre-canonicalized string caused a double-canonicalization
+    // regression: the server digest of the envelope disagreed with
+    // any caller that correctly computed `payloadDigestHex(stripped)`
+    // directly, breaking the signing-input contract
+    // `scopeKey + '\n' + serverDigest` across deployments. Pass the
+    // structured object directly.
     const envelopeForDigest = stripNonDigestFields(envelope);
-    const payloadDigest = payloadDigestHex(canonicalJson(envelopeForDigest));
+    const payloadDigest = payloadDigestHex(envelopeForDigest);
     const signingInput = scopeKey + '\n' + payloadDigest;
     const expectedSig = hmacSha256Hex(signingInput, resolved.entry.secret);
     if (!safeEqualHex(expectedSig, args.credential.signatureHex)) {
@@ -669,7 +677,9 @@ export class AutomationGateway {
               idempotencyKey: envelope.idempotencyKey,
             })
           : 'unknown',
-        envelope ? payloadDigestHex(canonicalJson(envelope)) : 'unknown',
+        // N8N/1.1 R2 correction: payloadDigestHex() canonicalizes its
+        // argument internally; do NOT pre-canonicalize here.
+        envelope ? payloadDigestHex(envelope) : 'unknown',
         response,
         cacheHit,
         idempotencyConflict,
