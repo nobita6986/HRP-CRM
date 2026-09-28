@@ -1,0 +1,12 @@
+b9c6967337924a27a33315cce6ac64632c541900ed53dd684ee9dc4a8ea1a287  tools/n8n-nodes-hrp-automation-dispatch/README.md
+d9aacfcee03f9eb52598cd8f8a3519dd3adf6ff567187bb2474d4d2dde827a3a  tools/n8n-nodes-hrp-automation-dispatch/package.json
+752d34d9d62ebec29e4cd7493f1191e7adc7d10ff1ed62e115a2611ca9522e61  tools/n8n-nodes-hrp-automation-dispatch/package-lock.json
+f7fc65316eaff156926208833ceab4ae073202201bf9a07bc5e46472016e17a5  tools/n8n-nodes-hrp-automation-dispatch/dist/lib/signer.js
+0b86bb9e5fc13c31e6ff450ba95bff5a778d2432ba8140800d7fa8740227a512  tools/n8n-nodes-hrp-automation-dispatch/dist/credentials/HrpAutomationLegacySignature.credentials.js
+cc7d93e95b6467054dc914f3d7bc0a45e33b304502ea2537768cfb6e5b62ec6a  tools/n8n-nodes-hrp-automation-dispatch/dist/nodes/HrpAutomationDispatch/HrpAutomationDispatch.node.js
+e2b97f77a5be59736b17e433cc87bc2384d50bd58ca71874d75888913667a339  tools/n8n-nodes-hrp-automation-dispatch/test/signer.test.mjs
+7be8c3b327e5d5acf0592ab0909c63a0be20c32220c494842a348de57bac922c  tools/n8n-nodes-hrp-automation-dispatch/test/node.test.mjs
+767536a8099c0c504b9009fad83cf04793d4cfbac661dbc6947a1c94c7472cf6  docs/contracts/n8n/N8N-1.2-SIGNER-RUNTIME/README.md
+ce3bdda8a503f96a1bcc5b5629daa414d702469d7f7c2244a4b04c0a79863198  docs/contracts/n8n/N8N-1.2-SIGNER-RUNTIME/INSTALL-EVIDENCE.md
+c514f47f8bc3d403fedc47cb9240ce827189e0eb5b6e6307f0460fb4f0bfe506  docs/contracts/n8n/N8N-1.2-SIGNER-RUNTIME/SECURITY-BOUNDARY.md
+596cc1e4f14645732275fc9a5b103ada664d83ab1cad015107921f35d2f3b096  docs/contracts/n8n/N8N-1.2-SIGNER-RUNTIME/NEXT-GATE.md
