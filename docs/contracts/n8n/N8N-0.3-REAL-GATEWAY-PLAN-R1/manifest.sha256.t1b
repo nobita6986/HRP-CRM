@@ -1,0 +1,29 @@
+# SHA-256 manifest -- T1-B N8N/0.3 r1 RG-02 durable idempotency authority
+# Generated from git-index blobs (committed).
+# Re-verify with: git hash-object <file>
+
+# 11 files:
+# 001  blob=188ede4b66c40cc0...  file-sha256=253ba86d128c84ee...  apps/integration-api/src/automation/idempotency-authority.ts
+# 002  blob=6d65189a65096267...  file-sha256=613d1a9972d14450...  apps/integration-api/src/automation/in-memory-idempotency-authority.ts
+# 003  blob=ffff527622c20124...  file-sha256=722147dae8f945c0...  apps/integration-api/src/automation/postgres-idempotency-authority.ts
+# 004  blob=3b2e7b8eabac43d1...  file-sha256=f1c317a2ed685c92...  apps/integration-api/tests/idempotency-authority-unit.test.mjs
+# 005  blob=755d5c4c81295ce5...  file-sha256=2291cad69488519a...  apps/integration-api/tests/pg-idempotency-harness.mjs
+# 006  blob=dab8d3b63d45f76f...  file-sha256=755b6b2d2caf14f0...  apps/integration-api/tests/postgres-idempotency.int.test.mjs
+# 007  blob=140bc26c53b8cf44...  file-sha256=9a2615803e3ffb23...  docs/contracts/n8n/N8N-0.3-REAL-GATEWAY-PLAN-R1/GATEWAY-AUTHORITY-INTEGRATION.md
+# 008  blob=629da577466e64bd...  file-sha256=c479aa0f95b33651...  packages/contracts/package-lock.json
+# 009  blob=5d182641fd2b023d...  file-sha256=f56430e3cc1bca16...  packages/integration-store/prisma/migrations/0006_automation_idempotency_authority/migration.sql
+# 010  blob=23f7a1696e4f71b0...  file-sha256=d29ca4157fbb4cd5...  packages/integration-store/prisma/migrations/0006_automation_idempotency_authority/rollback.sql
+# 011  blob=701c6f07f8e78f16...  file-sha256=0f1fe7733ad4efbe...  packages/integration-store/prisma/schema.prisma
+
+# Full SHA-256 of staged blobs (verify with git hash-object):
+188ede4b66c40cc0264997087853ee7101a80c69  apps/integration-api/src/automation/idempotency-authority.ts
+6d65189a65096267ede5f18b03870c94aa0e8117  apps/integration-api/src/automation/in-memory-idempotency-authority.ts
+ffff527622c20124db54e362076975e3039c4bfa  apps/integration-api/src/automation/postgres-idempotency-authority.ts
+3b2e7b8eabac43d1b5202eb930158abf5dc29a3e  apps/integration-api/tests/idempotency-authority-unit.test.mjs
+755d5c4c81295ce5e203f8a25841bf115dc65ce9  apps/integration-api/tests/pg-idempotency-harness.mjs
+dab8d3b63d45f76fffb32733704b818b86b06360  apps/integration-api/tests/postgres-idempotency.int.test.mjs
+140bc26c53b8cf4469e9cdf1e61746a26a59f2d0  docs/contracts/n8n/N8N-0.3-REAL-GATEWAY-PLAN-R1/GATEWAY-AUTHORITY-INTEGRATION.md
+629da577466e64bdce55eacb82d75443dd48f7ca  packages/contracts/package-lock.json
+5d182641fd2b023d995442af4361f86d89a5a66b  packages/integration-store/prisma/migrations/0006_automation_idempotency_authority/migration.sql
+23f7a1696e4f71b0c270e3effe9625468fd4ba76  packages/integration-store/prisma/migrations/0006_automation_idempotency_authority/rollback.sql
+701c6f07f8e78f16348a7be9b9563f89635b66c1  packages/integration-store/prisma/schema.prisma

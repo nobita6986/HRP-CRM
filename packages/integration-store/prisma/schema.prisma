@@ -35,6 +35,9 @@ generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["multiSchema"]
   binaryTargets   = ["native"]
+  // Output into the consuming app's .prisma directory so TypeScript resolution
+  // yields a single, consistent PrismaClient type across both packages.
+  output         = "../../apps/integration-api/node_modules/.prisma/client"
 }
 
 enum LinkState {
@@ -409,6 +412,68 @@ enum RecoveryActionKind {
   RECLAIM_LEASE
   DEAD_LETTER
   SKIP
+  @@schema("integration")
+}
+
+// =============================================================================
+// AutomationIdempotencyRecord — T1-B N8N/0.3 r1 RG-02 durable idempotency authority.
+//
+// Replaces process-local map for the real gateway runtime. Atomic first claim
+// on (scopeKey, payloadDigest, correlationId); same triple returns recorded
+// terminal response; digest or correlation mismatch returns IDEMPOTENCY_CONFLICT.
+// Server-trusted scopeKey. First-writer-wins preserves boundCorrelationId.
+// Bounded PENDING/LEASED lease + fencing token + heartbeat for the rare
+// in-flight claim; no permanent stall if owner dies.
+// =============================================================================
+enum AutomationIdempotencyState {
+  // Lease held by an in-flight gateway request; awaiting terminal record().
+  PENDING
+  // Terminal recorded row; the in-committed wire response is in resultJson.
+  RECORDED
+  @@schema("integration")
+}
+
+model AutomationIdempotencyRecord {
+  // scopeKey = org|conn|service|commandName|idempotencyKey (server-derived).
+  scopeKey                      String                       @id @db.VarChar(256)
+
+  // SHA-256 hex of canonicalized envelope minus volatile tracking ids.
+  payloadDigest                 String                       @db.VarChar(64)
+
+  // The correlationId that FIRST claimed this scope; preserved across
+  // subsequent record() calls (first-writer-wins).
+  boundCorrelationId            String                       @db.VarChar(128)
+  incomingCorrelationIdOnRecord String                       @db.VarChar(128)
+
+  // Server-trusted bookkeeping.
+  idempotencyKey                String                       @db.VarChar(256)
+  commandName                   String                       @db.VarChar(64)
+  organizationId                String                       @db.VarChar(64)
+  connectionId                  String                       @db.VarChar(128)
+  serviceId                     String                       @db.VarChar(128)
+  workflowId                    String                       @db.VarChar(128)
+
+  // Atomic claim state.
+  state                         AutomationIdempotencyState   @default(RECORDED)
+
+  // Bounded lease / fencing for in-flight claim.
+  leaseOwner                    String?                      @db.VarChar(128)
+  leaseExpiresAt                DateTime?
+  fencingToken                  String?                      @db.VarChar(128)
+  leaseFencedAt                 DateTime?
+
+  // Terminal wire response (JSON). Receiver redacts before persisting.
+  resultJson                    Json
+
+  // Audit / observability.
+  claimCount                    Int                          @default(0)
+  hitCount                      Int                          @default(0)
+  createdAt                     DateTime                     @default(now())
+  updatedAt                     DateTime                     @updatedAt
+
+  @@index([leaseExpiresAt], name: "ix_idem_record_lease_expiry")
+  @@index([createdAt(sort: Desc)], name: "ix_idem_record_created_at")
+  @@index([organizationId, createdAt(sort: Desc)], name: "ix_idem_record_org_created")
   @@schema("integration")
 }
 
