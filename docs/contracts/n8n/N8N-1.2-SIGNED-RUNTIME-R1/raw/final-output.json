@@ -1,0 +1,16 @@
+[
+  {
+    "statusCode": 200,
+    "body": {
+      "status": "APPLIED",
+      "mode": "SYNTHETIC_SIGNER_RUNTIME_VERIFIER",
+      "cached": false,
+      "payloadDigest": "65a85949d373e1831acddb2950f3c4e4c4cd6fac42286434a4229b15a4b19c82"
+    },
+    "commandId": "cmd-signer-conformance-r1",
+    "correlationId": "corr-signer-conformance-r1",
+    "idempotencyKey": "idem-signer-conformance-r1",
+    "payloadDigest": "65a85949d373e1831acddb2950f3c4e4c4cd6fac42286434a4229b15a4b19c82",
+    "signatureProfile": "LEGACY_SHA256_INPUT_SECRET"
+  }
+]

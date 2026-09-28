@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "1",
+  "profile": "N8N/1.2-MOCK",
+  "source": {
+    "workflowId": "CiWYL3CwKkl83Fx0",
+    "workflowVersionId": "6cef48af-3615-4445-b9b2-52db9696088b",
+    "executionId": "10",
+    "executionVersionId": "6cef48af-3615-4445-b9b2-52db9696088b",
+    "workflowRawSha256": "d1e22043a24d17e8f610abf7eaaa32329402354f130da16352dbf776d140ff8a",
+    "executionRawSha256": "fa9eeb4daa1570ebde97296f4aba8382d094b81efb6696ca718dfa616180d013",
+    "finalOutputSha256": "602f64f8e88be7a7723f16361c7231dd23116207138d18d01192851294892669"
+  },
+  "observed": {
+    "counts": {
+      "seen": 7,
+      "eligible": 4,
+      "send": 3,
+      "fallback": 1,
+      "acknowledged": 4,
+      "dropped": 3,
+      "errors": 0
+    },
+    "reminderCount": 3,
+    "acknowledgementCount": 4,
+    "droppedCount": 3,
+    "httpRequestNodeCount": 0,
+    "credentialNodeCount": 0
+  },
+  "checks": {
+    "oneFinalItem": true,
+    "workflowIdentity": true,
+    "mockMode": true,
+    "outputInactive": true,
+    "serverWorkflowInactive": true,
+    "executionSuccess": true,
+    "executionFinished": true,
+    "workflowVersionBound": true,
+    "countsExact": true,
+    "arrayLengthsExact": true,
+    "reminderSetMatchesSendSet": true,
+    "acknowledgementSetMatchesEligibleSet": true,
+    "handledSetIsUnique": true,
+    "handledSetCoversSeen": true,
+    "contractValidation": true,
+    "declaredInvariants": true,
+    "signerStillBlocked": true,
+    "noHttpRequestNodes": true,
+    "noCredentialReferences": true,
+    "publicApiEnvelopeValidation": true,
+    "sourceAttestationPass": true
+  },
+  "verdict": "PASS",
+  "failures": [],
+  "boundary": {
+    "workflowActive": false,
+    "transportMode": "MOCK",
+    "signedHttp": "NOT_EXECUTED",
+    "deployment": "NOT_EXECUTED"
+  }
+}

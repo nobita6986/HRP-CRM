@@ -1,0 +1,29 @@
+{
+  "name": "n8n-nodes-hrp-automation-dispatch",
+  "version": "0.1.0-private.1",
+  "private": true,
+  "description": "Private n8n credential and dispatch node for the CRM automation gateway",
+  "license": "UNLICENSED",
+  "main": "dist/nodes/HrpAutomationDispatch/HrpAutomationDispatch.node.js",
+  "files": [
+    "dist/",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "pack:inspect": "npm pack --dry-run"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "strict": true,
+    "credentials": [
+      "dist/credentials/HrpAutomationLegacySignature.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/HrpAutomationDispatch/HrpAutomationDispatch.node.js"
+    ]
+  }
+}

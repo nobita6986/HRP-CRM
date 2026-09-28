@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "1",
+  "fetchedAt": "2026-09-28T03:51:33.297Z",
+  "source": {
+    "instance": "crm",
+    "baseUrl": "https://n8n-crm.hrpartner.vn",
+    "api": "n8n-public-api-v1"
+  },
+  "workflow": {
+    "id": "J02Z2ytL5tNsT64e",
+    "name": "T0 — N8N/1.2 Signer Runtime Conformance R1",
+    "active": false,
+    "versionId": "e87ac600-f115-43e6-811e-86559fdf1f14",
+    "nodeCount": 4,
+    "rawSha256": "2681d97c94eb3ecd38ab2851431d0942aba05bbb06007a1551a70bf565759215",
+    "canonicalSha256": "c60b4dd8afa2d57dc961bd473f7219811467263df2427e81f56e0decd045698a"
+  },
+  "execution": {
+    "id": "12",
+    "workflowId": "J02Z2ytL5tNsT64e",
+    "workflowVersionId": "e87ac600-f115-43e6-811e-86559fdf1f14",
+    "status": "success",
+    "finished": true,
+    "mode": "manual",
+    "startedAt": "2026-09-28T03:48:38.710Z",
+    "stoppedAt": "2026-09-28T03:48:39.158Z",
+    "lastNodeExecuted": "Build Signed Runtime Evidence",
+    "rawSha256": "9e5d1b8480283eba69d198f2b473d0355599fb8a9372bd9c9402aca6bb84642c"
+  },
+  "finalOutput": {
+    "node": "Build Signed Runtime Evidence",
+    "itemCount": 1,
+    "sha256": "a4e6a56c3e56e96cc91c95ef815d9cd70c7f0fee4c1ff221fe41cd57bced4837",
+    "envelopeCount": 0
+  },
+  "schemaValidation": null,
+  "checks": {
+    "workflowIdMatches": true,
+    "executionWorkflowIdMatches": true,
+    "expectedVersionMatches": true,
+    "executedVersionMatches": true,
+    "inactive": true,
+    "executionFinished": true,
+    "finalNodeFound": true,
+    "finalOutputFound": true,
+    "schemaValid": null
+  },
+  "verdict": "PASS",
+  "failures": []
+}
