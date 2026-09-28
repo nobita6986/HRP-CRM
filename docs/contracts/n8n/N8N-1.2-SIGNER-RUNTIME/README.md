@@ -1,6 +1,6 @@
 # N8N/1.2 signer runtime R1
 
-Status: `READY_FOR_AI_N8N_SIGNED_RUNTIME_CONFORMANCE`
+Status: `SIGNED_RUNTIME_CONFORMANCE_PASS`
 
 The private `n8n-nodes-hrp-automation-dispatch` package is installed and
 loaded on `n8n-crm` 2.40.6. It is not installed on `n8n-hrp`.
@@ -18,8 +18,9 @@ loaded on `n8n-crm` 2.40.6. It is not installed on `n8n-hrp`.
 - Synthetic verifier deployment: PASS
 - Synthetic signer credential provisioning: PASS
 - Verifier HTTPS health and fail-closed route probes: PASS
-- Workflow conversion to `SIGNED_HTTP`: NOT EXECUTED
-- Signed execution: NOT EXECUTED
+- Separate signed conformance workflow: PASS
+- Signed execution against synthetic verifier: PASS
+- Product workflow conversion to `SIGNED_HTTP`: NOT EXECUTED
 - Workflow activation: NOT AUTHORIZED
 
 ## Package identity
@@ -46,3 +47,6 @@ or represented as HMAC.
 The provisioned credential and verifier use a synthetic identity tuple and a
 random secret. They may prove signed runtime conformance only. They are not a
 substitute for the registered CRM gateway tuple required by a real workflow.
+
+The immutable server-authoritative result is recorded under
+`N8N-1.2-SIGNED-RUNTIME-R1`.

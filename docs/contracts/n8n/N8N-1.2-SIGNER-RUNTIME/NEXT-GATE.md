@@ -1,6 +1,6 @@
 # Next gate
 
-Status: `READY_FOR_AI_N8N_SIGNED_RUNTIME_CONFORMANCE`
+Status: `SIGNED_RUNTIME_CONFORMANCE_PASS`
 
 The real CRM gateway remains blocked until T0 provides or approves one
 registered tuple:
@@ -14,11 +14,9 @@ registered tuple:
 The secret must be entered directly into the n8n credential store and must
 never be sent to the n8n AI Assistant.
 
-The synthetic credential is already provisioned. Send the task in
-`AI-N8N-SIGNED-RUNTIME-PROMPT.md` to the n8n AI Assistant to prove the live
-custom-node path without changing the accepted product workflow.
+The synthetic workflow completed successfully and is pinned in
+`N8N-1.2-SIGNED-RUNTIME-R1`. The next gate is a separate real CRM gateway and
+registry task. Do not reuse the synthetic credential for that gate.
 
-T0 then uses the server-authoritative evidence pull to validate the exact
-saved version and execution. A PASS changes only
-`SIGNED_RUNTIME_CONFORMANCE`; real gateway and production activation remain
-separate closed gates.
+`SIGNED_RUNTIME_CONFORMANCE` is PASS. Real gateway, product workflow
+conversion and production activation remain separate closed gates.

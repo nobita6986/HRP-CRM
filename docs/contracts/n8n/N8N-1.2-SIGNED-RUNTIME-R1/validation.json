@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "1",
+  "profile": "N8N/1.2-SIGNED-RUNTIME-CONFORMANCE",
+  "source": {
+    "workflowId": "J02Z2ytL5tNsT64e",
+    "workflowVersionId": "e87ac600-f115-43e6-811e-86559fdf1f14",
+    "executionId": "12",
+    "workflowRawSha256": "2681d97c94eb3ecd38ab2851431d0942aba05bbb06007a1551a70bf565759215",
+    "executionRawSha256": "9e5d1b8480283eba69d198f2b473d0355599fb8a9372bd9c9402aca6bb84642c",
+    "finalOutputSha256": "a4e6a56c3e56e96cc91c95ef815d9cd70c7f0fee4c1ff221fe41cd57bced4837"
+  },
+  "observed": {
+    "statusCode": 200,
+    "bodyStatus": "APPLIED",
+    "bodyMode": "SYNTHETIC_SIGNER_RUNTIME_VERIFIER",
+    "payloadDigest": "65a85949d373e1831acddb2950f3c4e4c4cd6fac42286434a4229b15a4b19c82",
+    "signatureProfile": "LEGACY_SHA256_INPUT_SECRET"
+  },
+  "checks": {
+    "sourceAttestationPass": true,
+    "exactWorkflow": true,
+    "exactVersion": true,
+    "exactExecution": true,
+    "workflowVersionBound": true,
+    "inactive": true,
+    "manualSuccess": true,
+    "finalNodeBound": true,
+    "fourNodes": true,
+    "oneCustomDispatchNode": true,
+    "noHttpRequestNode": true,
+    "expectedCredential": true,
+    "oneFinalItem": true,
+    "exactOutputKeys": true,
+    "exactBodyKeys": true,
+    "applied": true,
+    "syntheticVerifier": true,
+    "correctSignatureProfile": true,
+    "digestFormat": true,
+    "digestAgreement": true,
+    "expectedIds": true,
+    "noSensitiveOutputValues": true
+  },
+  "verdict": "PASS",
+  "failures": [],
+  "boundary": {
+    "signedRuntimeConformance": "PASS",
+    "realCrmGateway": "NOT_EXECUTED",
+    "workflowActivation": "NOT_AUTHORIZED",
+    "productionEnablement": "NOT_AUTHORIZED"
+  }
+}
