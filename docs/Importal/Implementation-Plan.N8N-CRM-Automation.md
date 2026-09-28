@@ -1,8 +1,8 @@
 # Kế hoạch áp dụng n8n cho CRM — ranh giới CRM / HRP
 
-**Ngày lập:** 24/09/2026  
-**Trạng thái:** PLAN ONLY — chưa triển khai workflow, chưa kết nối credential thật, chưa bật production  
-**Phạm vi điều phối:** CRM-owned automation và Integration-owned orchestration  
+**Ngày lập:** 24/09/2026
+**Trạng thái:** PLAN ONLY — chưa triển khai workflow, chưa kết nối credential thật, chưa bật production
+**Phạm vi điều phối:** CRM-owned automation và Integration-owned orchestration
 **Không thuộc phạm vi:** quyết định kiến trúc hoặc triển khai thay T0 HRP
 
 ## 1. Mục tiêu
@@ -116,7 +116,7 @@ hoặc real HRP path vẫn tuân theo gate riêng.
 
 ### N8N/0.1 — Server inventory và security baseline
 
-**Ownership:** CRM_OWNED  
+**Ownership:** CRM_OWNED
 **Mục tiêu:** biết chính xác server n8n đang có gì trước khi import workflow.
 
 Phạm vi:
@@ -140,7 +140,7 @@ Phạm vi:
 ### N8N/0.2 — CRM automation gateway contract
 
 **Ownership:** CRM_OWNED; chuyển SHARED_BOUNDARY chỉ khi payload chứa HRP result
-hoặc gọi real HRP API.  
+hoặc gọi real HRP API.
 **Mục tiêu:** không để từng workflow tự phát minh cách gọi CRM.
 
 Đầu ra dự kiến:
@@ -156,7 +156,7 @@ hoặc gọi real HRP API.
 
 ### N8N/1.1 — Follow-up và SLA reminder POC
 
-**Ownership:** CRM_OWNED  
+**Ownership:** CRM_OWNED
 **Độ ưu tiên:** cao; workflow đầu tiên được khuyến nghị.
 
 Flow:
