@@ -1,0 +1,21 @@
+services:
+  signer-verifier:
+    image: docker.n8n.io/n8nio/n8n:2.40.6
+    entrypoint: ["node", "/app/server.mjs"]
+    env_file: [.env]
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/tmp]
+    ports:
+      - "127.0.0.1:18081:8080"
+    volumes:
+      - ./server.mjs:/app/server.mjs:ro
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 10s
+

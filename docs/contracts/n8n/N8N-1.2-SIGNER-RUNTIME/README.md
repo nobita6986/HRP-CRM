@@ -1,6 +1,6 @@
 # N8N/1.2 signer runtime R1
 
-Status: `READY_FOR_T0_N8N12_SIGNER_RUNTIME_REVIEW`
+Status: `READY_FOR_AI_N8N_SIGNED_RUNTIME_CONFORMANCE`
 
 The private `n8n-nodes-hrp-automation-dispatch` package is installed and
 loaded on `n8n-crm` 2.40.6. It is not installed on `n8n-hrp`.
@@ -15,7 +15,9 @@ loaded on `n8n-crm` 2.40.6. It is not installed on `n8n-hrp`.
 - Live CRM health after restart: PASS
 - Live credential schema registration: PASS
 - HRP restart or package installation: NOT PERFORMED
-- Credential provisioning: NOT EXECUTED
+- Synthetic verifier deployment: PASS
+- Synthetic signer credential provisioning: PASS
+- Verifier HTTPS health and fail-closed route probes: PASS
 - Workflow conversion to `SIGNED_HTTP`: NOT EXECUTED
 - Signed execution: NOT EXECUTED
 - Workflow activation: NOT AUTHORIZED
@@ -40,3 +42,7 @@ envelope whose organization, connection or service identity differs.
 The signature profile is the accepted legacy
 `SHA-256(signingInput || secret)` construction. It is deliberately not named
 or represented as HMAC.
+
+The provisioned credential and verifier use a synthetic identity tuple and a
+random secret. They may prove signed runtime conformance only. They are not a
+substitute for the registered CRM gateway tuple required by a real workflow.
