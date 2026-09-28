@@ -12,7 +12,7 @@ d9aacfcee03f9eb52598cd8f8a3519dd3adf6ff567187bb2474d4d2dde827a3a  tools/n8n-node
 b9c6967337924a27a33315cce6ac64632c541900ed53dd684ee9dc4a8ea1a287  tools/n8n-nodes-hrp-automation-dispatch/README.md
 7be8c3b327e5d5acf0592ab0909c63a0be20c32220c494842a348de57bac922c  tools/n8n-nodes-hrp-automation-dispatch/test/node.test.mjs
 e2b97f77a5be59736b17e433cc87bc2384d50bd58ca71874d75888913667a339  tools/n8n-nodes-hrp-automation-dispatch/test/signer.test.mjs
-65b099ca5758d617587e774d3c5789986ca032c38331e3e86865b138785dc124  tools/n8n-signer-runtime-verifier/compose.yaml
+0c09920e93f9d6e60a4fbaf3e4c42991e17459701740661ed7fc0ed90c98871d  tools/n8n-signer-runtime-verifier/compose.yaml
 2da8dd24aeb789be2049c4d6a3c6bbd75e3fc1e9e630d7118d10eb96ed300666  tools/n8n-signer-runtime-verifier/deploy.ps1
 3ebcd460b50d2956ea67a98bfddd25f2a6c6e77b7f5dc9525afd1fabc6084614  tools/n8n-signer-runtime-verifier/nginx-location.conf
 d63b6eae0771da88c57aacef09b9efd37efe93d99576e011b604f7422b61a56d  tools/n8n-signer-runtime-verifier/README.md
